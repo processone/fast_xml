@@ -39,4 +39,24 @@ if test "x$EXPAT_HEADER" = "x"; then
    AC_MSG_ERROR([Expat header file "expat.h" was not found])
 fi
 
+AC_ARG_ENABLE(full_xml,
+[AC_HELP_STRING([--enable-full-xml], [use XML features in XMPP stream (ex: CDATA) (default: no, requires XML compliant clients)])],
+[case "${enableval}" in
+  yes) full_xml=true ;;
+  no)  full_xml=false ;;
+  *) AC_MSG_ERROR(bad value ${enableval} for --enable-full-xml) ;;
+esac],[full_xml=false])
+AC_SUBST(full_xml)
+
+AC_ARG_ENABLE(nif,
+[AC_HELP_STRING([--enable-nif], [replace some functions with C equivalents. Requires Erlang R13B04 or higher (default: no)])],
+[case "${enableval}" in
+  yes) nif=true ;;
+  no)  nif=false ;;
+  *) AC_MSG_ERROR(bad value ${enableval} for --enable-nif) ;;
+esac],[nif=false])
+AC_SUBST(nif)
+
+AC_CONFIG_FILES([rebar.config.script])
+
 AC_OUTPUT
