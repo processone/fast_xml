@@ -30,7 +30,7 @@ Config = [{erl_opts, [debug_info|Macros]},
                       {"LDFLAGS", "$LDFLAGS -lexpat"}]},
           {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
                         | NIFPortSpec]}],
-io:format("xml configuration:~n  ~p~n", [Config]),
+%%io:format("xml configuration:~n  ~p~n", [Config]),
 Config.
 
 %% Local Variables:
