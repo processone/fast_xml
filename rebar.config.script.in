@@ -7,6 +7,7 @@
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
 Cfg = [{full_xml, @full_xml@},
+       {flash_hack, @flash_hack@},
        {nif, @nif@}].
 
 Macros = lists:flatmap(
@@ -14,6 +15,8 @@ Macros = lists:flatmap(
                    [{d, 'FULL_XML_SUPPORT'}];
               ({nif, true}) ->
                    [{d, 'NIF'}];
+              ({flash_hack, true}) ->
+                   [{d, 'ENABLE_FLASH_HACK'}];
               (_) ->
                    []
            end, Cfg),
@@ -25,8 +28,15 @@ NIFPortSpec = case lists:keysearch(nif, 1, Cfg) of
                       []
               end,
 
+FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of
+                    {value, {flash_hack, true}} ->
+                        " -DENABLE_FLASH_HACK";
+                    _ ->
+                        ""
+                end,
+
 Config = [{erl_opts, [debug_info|Macros]},
-          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall"},
+          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall" ++ FlashHackFlag},
                       {"LDFLAGS", "$LDFLAGS -lexpat"}]},
           {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
                         | NIFPortSpec]}],

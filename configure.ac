@@ -57,6 +57,15 @@ AC_ARG_ENABLE(nif,
 esac],[nif=false])
 AC_SUBST(nif)
 
+AC_ARG_ENABLE(flash_hack,
+[AC_HELP_STRING([--enable-flash-hack], [support Adobe Flash client XML (default: no)])],
+[case "${enableval}" in
+  yes) flash_hack=true ;;
+  no)  flash_hack=false ;;
+  *) AC_MSG_ERROR(bad value ${enableval} for --enable-flash-hack) ;;
+esac],[flash_hack=false])
+AC_SUBST(flash_hack)
+
 AC_CONFIG_FILES([rebar.config.script])
 
 AC_OUTPUT

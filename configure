@@ -591,6 +591,7 @@ ac_includes_default="\
 #endif"
 
 ac_subst_vars='LTLIBOBJS
+flash_hack
 nif
 full_xml
 ERLCFLAGS
@@ -651,6 +652,7 @@ ac_user_opts='
 enable_option_checking
 enable_full_xml
 enable_nif
+enable_flash_hack
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1279,6 +1281,7 @@ Optional Features:
                           (default: no, requires XML compliant clients)
   --enable-nif            replace some functions with C equivalents. Requires
                           Erlang R13B04 or higher (default: no)
+  --enable-flash-hack     support Adobe Flash client XML (default: no)
 
 Some influential environment variables:
   CC          C compiler command
@@ -3796,6 +3799,19 @@ if test "${enable_nif+set}" = set; then :
 esac
 else
   nif=false
+fi
+
+
+
+# Check whether --enable-flash_hack was given.
+if test "${enable_flash_hack+set}" = set; then :
+  enableval=$enable_flash_hack; case "${enableval}" in
+  yes) flash_hack=true ;;
+  no)  flash_hack=false ;;
+  *) as_fn_error $? "bad value ${enableval} for --enable-flash-hack" "$LINENO" 5  ;;
+esac
+else
+  flash_hack=false
 fi
 
 
