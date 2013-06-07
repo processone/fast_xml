@@ -1,13 +1,13 @@
 -record(attr, {name,
 	       label,
 	       required = false,
-	       default = <<"">>,
+	       default,
 	       dec,
 	       enc}).
 
 -record(cdata, {required = false,
-		label,
-		default = <<"">>,
+		label = '$cdata',
+		default,
 		dec,
 		enc}).
 
@@ -15,8 +15,8 @@
 	       label,
 	       xmlns = <<"">>,
 	       min = 0,
-	       max = unlimited,
-	       default = <<"">>,
+	       max = infinity,
+	       default,
 	       cdata = #cdata{},
 	       attrs = [],
 	       result,

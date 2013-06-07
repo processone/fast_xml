@@ -35,7 +35,7 @@ FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of
                         ""
                 end,
 
-Config = [{erl_opts, [debug_info|Macros]},
+Config = [{erl_opts, [debug_info, {src_dirs, [src, specs]}|Macros]},
           {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall" ++ FlashHackFlag},
                       {"LDFLAGS", "$LDFLAGS -lexpat"}]},
           {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
