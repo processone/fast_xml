@@ -588,7 +588,15 @@ make_els_cdata_fun(FunName, Calls, ElCDataVars) ->
                                []
                        end, Calls),
             NilClause = erl_syntax:clause(
-                          [erl_syntax:list([])|ElCDataVars],
+                          [erl_syntax:list([])|
+                           lists:flatmap(
+                             fun({Var, [{_F, #spec{min = 1, max = 1}}|_]}) ->
+                                     [erl_syntax:list([Var])];
+                                ({_, {_, #attr{}}}) ->
+                                     [];
+                                ({Var, _}) ->
+                                     [Var]
+                             end, Calls)],
                           none,
                           [tuple_or_single_var(Result)]),
             [erl_syntax:function(
