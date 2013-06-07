@@ -525,42 +525,42 @@ make_els_cdata_fun(FunName, Calls, ElCDataVars) ->
              (_) ->
                   []
           end, Calls),
-    if Clauses /= [] ->
-            SubClause =
-                case have_special_label(Calls, sub_els) of
-                    true ->
-                        [erl_syntax:clause(
-                           [erl_syntax:list(
-                              [erl_syntax:match_expr(
-                                 erl_syntax:tuple(
-                                   [erl_syntax:atom("xmlel"),
-                                    erl_syntax:underscore(),
-                                    erl_syntax:underscore(),
-                                    erl_syntax:underscore()]),
-                                 erl_syntax:variable("_el"))],
-                              erl_syntax:variable("_els"))|
-                            ElCDataVars],
-                           none,
-                           [make_function_call(
-                              FunName,
-                              [erl_syntax:variable("_els")|
-                               lists:flatmap(
-                                 fun({Var, sub_els}) ->
-                                         [erl_syntax:list(
-                                            [make_function_call(
-                                               decode,
-                                               [erl_syntax:variable("_el")])],
-                                            Var)];
-                                    ({Var, [{_, #spec{}}|_]}) ->
-                                         [Var];
-                                    ({Var, {_, #cdata{}}}) ->
-                                         [Var];
-                                    (_) ->
-                                         []
-                                 end, Calls)])])];
-                    false ->
-                        []
-                end,
+    SubClause =
+        case have_special_label(Calls, sub_els) of
+            true ->
+                [erl_syntax:clause(
+                   [erl_syntax:list(
+                      [erl_syntax:match_expr(
+                         erl_syntax:tuple(
+                           [erl_syntax:atom("xmlel"),
+                            erl_syntax:underscore(),
+                            erl_syntax:underscore(),
+                            erl_syntax:underscore()]),
+                         erl_syntax:variable("_el"))],
+                      erl_syntax:variable("_els"))|
+                    ElCDataVars],
+                   none,
+                   [make_function_call(
+                      FunName,
+                      [erl_syntax:variable("_els")|
+                       lists:flatmap(
+                         fun({Var, sub_els}) ->
+                                 [erl_syntax:list(
+                                    [make_function_call(
+                                       decode,
+                                       [erl_syntax:variable("_el")])],
+                                    Var)];
+                            ({Var, [{_, #spec{}}|_]}) ->
+                                 [Var];
+                            ({Var, {_, #cdata{}}}) ->
+                                 [Var];
+                            (_) ->
+                                 []
+                         end, Calls)])])];
+            false ->
+                []
+        end,
+    if Clauses /= []; SubClause /= [] ->
             PassClause = erl_syntax:clause(
                            [erl_syntax:list(
                               [erl_syntax:underscore()],
