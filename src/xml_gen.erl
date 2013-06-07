@@ -28,7 +28,8 @@
 -define(warn(F, Args), io:format("* xml_gen warning: " ++ F ++ "~n", Args)).
 
 -record(state, {labels = [], ast = [], all_specs = [],
-                known_functions = [], silent = false}).
+                known_functions = [], silent = false,
+                records = []}).
 
 %%====================================================================
 %% Compiler API
@@ -115,13 +116,14 @@ compile(TaggedSpecs, Forms, Path) ->
                   end, Forms),
     FileName = filename:basename(Path),
     ModName = filename:rootname(FileName),
-    #state{ast = AST} = lists:foldl(
-                          fun({Tag, Spec}, State) ->
-                                  NewState = spec_to_AST(Spec, [Tag], State),
-                                  NewState#state{labels = []}
-                          end, #state{all_specs = TaggedSpecs,
-                                      known_functions = KnownFuns},
-                          TaggedSpecs),
+    #state{ast = AST, records = RecordsAST} =
+        lists:foldl(
+          fun({Tag, Spec}, State) ->
+                  NewState = spec_to_AST(Spec, [Tag], State),
+                  NewState#state{labels = []}
+          end, #state{all_specs = TaggedSpecs,
+                      known_functions = KnownFuns},
+          TaggedSpecs),
     Decoder = make_xmlns_decoder(TaggedSpecs),
     NewAST = [Decoder|Forms ++ AST],
     Exports = erl_syntax:attribute(
@@ -140,9 +142,17 @@ compile(TaggedSpecs, Forms, Path) ->
     Decoder = make_xmlns_decoder(TaggedSpecs),
     ResultAST = erl_syntax:form_list([Module, CompilerOpts, Exports|NewAST]),
     DirName = filename:dirname(Path),
-    file:write_file(
-      filename:join([DirName, ModName ++ ".erl"]),
-      [erl_prettypr:format(ResultAST), io_lib:nl()]).
+    case file:write_file(
+           filename:join([DirName, ModName ++ ".erl"]),
+           [erl_prettypr:format(ResultAST), io_lib:nl()]) of
+        ok ->
+            file:write_file(
+              filename:join([DirName, ModName ++ ".hrl"]),
+              [erl_prettypr:format(erl_syntax:form_list(RecordsAST)),
+               io_lib:nl()]);
+        Err ->
+            Err
+    end.
 
 make_xmlns_decoder(TaggedSpecs) ->
     Clauses = lists:map(
@@ -233,9 +243,14 @@ spec_to_AST(#spec{name = Name, label = Label, xmlns = XMLNS,
                 true ->
                      AST ++ AttrAST ++ CDataAST ++ NewState#state.ast
              end,
+    NewRecords = if Silent ->
+                         NewState#state.records;
+                    true ->
+                         make_record(Result, Labels) ++ NewState#state.records
+                 end,
     NewLabels = [{NewLabel, make_dec_fun_name(NewParents), Spec}
                  |NewState#state.labels],
-    NewState#state{ast = NewAST, labels = NewLabels};
+    NewState#state{ast = NewAST, labels = NewLabels, records = NewRecords};
 spec_to_AST(SpecName, _Parents, #state{all_specs = AllSpecs,
                                        silent = Silent} = State) ->
     case lists:keyfind(SpecName, 1, AllSpecs) of
@@ -676,6 +691,57 @@ make_dec_fun_name(Vars) ->
                 end, [], Vars),
     "decode_" ++ string:join(NewVars, "_").
 
+make_record(Term, Labels) ->
+    try
+        [H|T] = [erl_syntax:atom_value(El)
+                 || El <- erl_syntax:tuple_elements(abstract(Term))],
+        false = is_label(H),
+        true = lists:all(fun is_label/1, T),
+        [erl_syntax:attribute(
+           erl_syntax:atom("record"),
+           [erl_syntax:atom(H),
+            erl_syntax:tuple(
+              lists:map(
+                fun(Label) ->
+                        Field = label_to_record_field(Label),
+                        case lists:flatmap(
+                               fun({L, _F, S}) when L == Label ->
+                                       [S];
+                                  (_) ->
+                                       []
+                               end, Labels) of
+                            [#spec{default = Default,
+                                   min = 0, max = 1}|_]
+                              when Default /= undefined ->
+                                erl_syntax:match_expr(
+                                  Field,
+                                  erl_syntax:abstract(Default));
+                            [#spec{max = Max}] when Max > 1 ->
+                                erl_syntax:match_expr(
+                                  Field,
+                                  erl_syntax:abstract([]));
+                            [#attr{default = Default}]
+                              when Default /= undefined ->
+                                erl_syntax:match_expr(
+                                  Field,
+                                  erl_syntax:abstract(Default));
+                            [#cdata{default = Default}]
+                              when Default /= undefined ->
+                                erl_syntax:match_expr(
+                                  Field,
+                                  erl_syntax:abstract(Default));
+                            [] ->
+                                erl_syntax:match_expr(
+                                  Field,
+                                  erl_syntax:abstract([]));
+                            (_) ->
+                                Field
+                        end
+                end, T))])]
+    catch _:_ ->
+            []
+    end.
+
 %% Fun(Args) -> Body.
 make_function(Fun, Args, Body) ->
     erl_syntax:function(
@@ -711,6 +777,14 @@ label_to_var(Label) ->
             erl_syntax:variable([$_, $_, string:to_upper(H)|T]);
         [$$|[H|T]] ->
             erl_syntax:variable([string:to_upper(H)|T])
+    end.
+
+label_to_record_field(Label) ->
+    case atom_to_list(Label) of
+        "$_els" ->
+            erl_syntax:atom("sub_els");
+        [$$|T] ->
+            erl_syntax:atom(T)
     end.
 
 have_special_label(Ss, sub_els) ->
