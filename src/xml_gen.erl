@@ -680,10 +680,13 @@ make_el_enc_fun(Parents, Result, Labels, Name, XMLNS, Default, Min, Max) ->
     FunName = make_enc_fun_name(Parents),
     {ResultWithVars, Calls} = subst_labels(Name, Result, Labels),
     ElCDataFun = lists:foldl(
-                   fun({Var, [#spec{min = 0, max = 1, enc_f = F}|_]},
-                       Acc) ->
+                   fun({Var, [#spec{min = 0, max = 1, enc_f = F}]}, Acc) ->
                            make_function_call(
                              F, [Var, Acc]);
+                      ({Var, [#spec{min = 0, max = 1, label = Lab}|_]}, Acc) ->
+                           make_function_call(
+                             make_enc_fun_name([Lab|Parents]),
+                             [Var, Acc]);
                       ({Var, [#spec{enc_f = F}|_]}, Acc) ->
                            make_function_call(
                              F, [Var, Acc]);
@@ -740,6 +743,36 @@ make_el_enc_fun(Parents, Result, Labels, Name, XMLNS, Default, Min, Max) ->
                         [erl_syntax:variable("_tail"),
                          NewAcc])]
              end,
+    LabeledFuns =
+        lists:flatmap(
+          fun({_Var, [#spec{label = Lab, default = Def}, _|_] = Ss}) ->
+                  LabeledFunName = make_enc_fun_name([Lab|Parents]),
+                  DefClause = erl_syntax:clause(
+                                [abstract(Def), erl_syntax:variable("_acc")],
+                                none,
+                                [erl_syntax:variable("_acc")]),
+                  Clauses =
+                      lists:map(
+                        fun(#spec{enc_f = F,
+                                  result = Res}) ->
+                                ResWithVars = replace_labels_with_vars(Res),
+                                erl_syntax:clause(
+                                  [erl_syntax:match_expr(
+                                     ResWithVars,
+                                     erl_syntax:variable("_r")),
+                                   erl_syntax:variable("_acc")],
+                                  none,
+                                  [make_function_call(
+                                     F, [erl_syntax:variable("_r"),
+                                         erl_syntax:variable("_acc")])])
+                        end, Ss),
+                  [erl_syntax:function(
+                     erl_syntax:atom(LabeledFunName),
+                     [DefClause|Clauses])];
+             (_) ->
+                  []
+          end, Calls),
+    LabeledFuns ++
     [erl_syntax:function(
        erl_syntax:atom(FunName),
        [erl_syntax:clause(
@@ -1013,6 +1046,18 @@ tuple_or_single_var([Var]) ->
     Var;
 tuple_or_single_var([_|_] = Vars) ->
     erl_syntax:tuple(Vars).
+
+replace_labels_with_vars(Term) ->
+    erl_syntax_lib:map(
+      fun(T) ->
+              try
+                  Label = erl_syntax:atom_value(T),
+                  true = is_label(Label),
+                  erl_syntax:underscore()
+              catch _:_ ->
+                      T
+              end
+      end, abstract(Term)).
 
 %%====================================================================
 %% Auxiliary functions
