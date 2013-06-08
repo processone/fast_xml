@@ -20,4 +20,6 @@
 	       cdata = #cdata{},
 	       attrs = [],
 	       result,
+               dec_f,
+               enc_f,
 	       els = []}).
