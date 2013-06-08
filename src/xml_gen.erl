@@ -348,7 +348,6 @@ make_label_call(TagName, Var, Label, Labels) ->
         [] when Label == '$_els' ->
             {Var, sub_els};
         [] ->
-            io:format("Labels = ~p~n", [Labels]),
             bad_spec({unresolved_label, Label, TagName});
         [#attr{} = S] ->
             {Var, S};
@@ -388,7 +387,7 @@ make_el_dec_fun(Parents, Result, Labels, Name) ->
                              [erl_syntax:variable("_attrs")|
                               lists:flatmap(
                                 fun({_Var, #attr{}}) ->
-                                        [abstract(<<>>)];
+                                        [erl_syntax:atom(undefined)];
                                    (_) ->
                                         []
                                 end, Calls)]),
@@ -802,7 +801,8 @@ make_decoding_MFA(Parents, TagName, TagNS, AttrName,
                _ -> "attr"
            end,
     Clause1 = erl_syntax:clause(
-                [abstract(<<>>)],
+                [if Type == "attr" -> erl_syntax:atom(undefined);
+                    true -> abstract(<<>>) end],
                 none,
                 [if IsRequired ->
                          make_function_call(
