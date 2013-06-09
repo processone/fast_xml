@@ -988,10 +988,21 @@ abstract(Term) ->
 label_to_var(Label) ->
     case atom_to_list(Label) of
         [$$,$_|[H|T]] ->
-            erl_syntax:variable([$_, $_, string:to_upper(H)|T]);
-        [$$|[H|T]] ->
-            erl_syntax:variable([string:to_upper(H)|T])
+            erl_syntax:variable(
+              replace_hyphens(
+                [$_, $_, string:to_upper(H)|T]));
+        [$$|[H|T]] when H /= $- ->
+            erl_syntax:variable(
+              replace_hyphens(
+                [string:to_upper(H)|T]))
     end.
+
+replace_hyphens([$-|T]) ->
+    [$_|replace_hyphens(T)];
+replace_hyphens([H|T]) ->
+    [H|replace_hyphens(T)];
+replace_hyphens([]) ->
+    [].
 
 label_to_record_field(Label) ->
     case atom_to_list(Label) of
@@ -1224,6 +1235,8 @@ is_label(Label) ->
         "$_els" ->
             true;
         [$$,$_|_] ->
+            false;
+        [$$,$-|_] ->
             false;
         [$$,_|_] ->
             true;
