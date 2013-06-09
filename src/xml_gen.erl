@@ -725,7 +725,7 @@ make_el_enc_fun(Parents, Result, Labels, Name, XMLNS, Default, Min, Max) ->
                    erl_syntax:variable("_attrs"),
                    erl_syntax:variable("_els")])],
                erl_syntax:variable("_acc")),
-    Return = if Min == 0, Max == 1 ->
+    Return = if Max == 1 ->
                      [NewAcc];
                 true ->
                      [make_function_call(
@@ -762,27 +762,32 @@ make_el_enc_fun(Parents, Result, Labels, Name, XMLNS, Default, Min, Max) ->
              (_) ->
                   []
           end, Calls),
+    DefaultClause = if Min == 1, Max == 1 ->
+                            [];
+                       true ->
+                            [erl_syntax:clause(
+                               [if Min == 0, Max == 1 -> abstract(Default);
+                                   true -> erl_syntax:list([])
+                                end,
+                                erl_syntax:variable("_acc")],
+                               none,
+                               [erl_syntax:variable("_acc")])]
+                    end,
+    FinalClause = [erl_syntax:clause(
+                     [if Max == 1 ->
+                              ResultWithVars;
+                         true ->
+                              erl_syntax:list(
+                                [ResultWithVars],
+                                erl_syntax:variable("_tail"))
+                      end,
+                      erl_syntax:variable("_acc")],
+                     none,
+                     Body ++ Return)],
     LabeledFuns ++
-    [erl_syntax:function(
-       erl_syntax:atom(FunName),
-       [erl_syntax:clause(
-          [if Min == 0, Max == 1 -> abstract(Default);
-              true -> erl_syntax:list([])
-           end,
-           erl_syntax:variable("_acc")],
-          none,
-          [erl_syntax:variable("_acc")]),
-        erl_syntax:clause(
-          [if Min == 0, Max == 1 ->
-                   ResultWithVars;
-              true ->
-                   erl_syntax:list(
-                     [ResultWithVars],
-                     erl_syntax:variable("_tail"))
-           end,
-           erl_syntax:variable("_acc")],
-          none,
-          Body ++ Return)])].
+        [erl_syntax:function(
+           erl_syntax:atom(FunName),
+           DefaultClause ++ FinalClause)].
 
 make_decoding_MFA(Parents, TagName, TagNS, AttrName,
                   IsRequired, Default, DecMFA) ->
