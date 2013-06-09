@@ -293,11 +293,18 @@ spec_to_AST(#spec{name = Name, label = Label, xmlns = XMLNS,
                  |NewState#state.labels],
     NewState#state{ast = NewAST, labels = NewLabels, records = NewRecords};
 spec_to_AST(SpecName, _Parents, #state{all_specs = AllSpecs,
+                                       labels = Labels,
                                        silent = Silent} = State) ->
     case lists:keyfind(SpecName, 1, AllSpecs) of
-        {_, #spec{} = Spec} ->
-            NewState = spec_to_AST(Spec, [SpecName], State#state{silent = true}),
-            NewState#state{silent = Silent};
+        {_, #spec{label = Label, name = Name} = Spec} ->
+            NewLabel = prepare_label(Label, Name),
+            case lists:keyfind(NewLabel, 1, Labels) of
+                false ->
+                    NewState = spec_to_AST(Spec, [SpecName], State#state{silent = true}),
+                    NewState#state{silent = Silent};
+                _ ->
+                    State
+            end;
         {_, _} ->
             bad_spec({wrong_spec_reference, SpecName});
         false ->
