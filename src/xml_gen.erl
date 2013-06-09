@@ -127,10 +127,6 @@ compile(TaggedSpecs, Forms, Path) ->
     Module = erl_syntax:attribute(
                erl_syntax:atom("module"),
                [erl_syntax:atom(list_to_atom(ModName))]),
-    CompilerOpts = erl_syntax:attribute(
-                     erl_syntax:atom("compile"),
-                     [erl_syntax:list(
-                        [erl_syntax:atom("nowarn_unused_function")])]),
     Decoders = make_top_decoders(TaggedSpecs),
     Encoders = make_top_encoders(TaggedSpecs),
     NewAST = Decoders ++ Encoders ++ Forms ++ AST,
@@ -144,7 +140,7 @@ compile(TaggedSpecs, Forms, Path) ->
                                erl_syntax:atom(FN),
                                erl_syntax:integer(Arity))
                      end, Decoders ++ Encoders))]),
-    ResultAST = erl_syntax:form_list([Module, CompilerOpts, Exports|NewAST]),
+    ResultAST = erl_syntax:form_list([Module, Exports|NewAST]),
     DirName = filename:dirname(Path),
     case file:write_file(
            filename:join([DirName, ModName ++ ".erl"]),
@@ -203,21 +199,11 @@ make_top_encoders(TaggedSpecs) ->
         lists:flatmap(
           fun({Tag, #spec{name = Name, result = Result}}) ->
                   Underscore = erl_syntax:underscore(),
-                  ResultWithVars =
-                      erl_syntax_lib:map(
-                        fun(T) ->
-                                try
-                                    Label = erl_syntax:atom_value(T),
-                                    true = is_label(Label),
-                                    Underscore
-                                catch _:_ ->
-                                        T
-                                end
-                        end, abstract(Result)),
-                  if ResultWithVars /= Underscore ->
+                  NewResult = labels_to_underscores(Result),
+                  if NewResult /= Underscore ->
                           [erl_syntax:clause(
                              [erl_syntax:match_expr(
-                                ResultWithVars, erl_syntax:variable("_r"))],
+                                NewResult, erl_syntax:variable("_r"))],
                              none,
                              [make_function_call(
                                 hd,
@@ -268,12 +254,17 @@ spec_to_AST(#spec{name = Name, label = Label, xmlns = XMLNS,
                    dec = CDataDecF,
                    enc = CDataEncF,
                    default = CDataDefault} = CData,
-            {[make_decoding_MFA([cdata|NewParents], Name, XMLNS, <<>>,
-                                CDataRequired, CDataDefault,
-                                prepare_MFA(CDataDecF, KnownFuns)),
-              make_encoding_MFA([cdata|NewParents], <<>>,
-                                CDataRequired, CDataDefault,
-                                prepare_MFA(CDataEncF, KnownFuns))],
+            {case have_label(Result, CDataLabl) of
+                 true ->
+                     [make_decoding_MFA([cdata|NewParents], Name, XMLNS, <<>>,
+                                        CDataRequired, CDataDefault,
+                                        prepare_MFA(CDataDecF, KnownFuns)),
+                      make_encoding_MFA([cdata|NewParents], <<>>,
+                                        CDataRequired, CDataDefault,
+                                        prepare_MFA(CDataEncF, KnownFuns))];
+                 false ->
+                     []
+             end,
              [{CDataLabl, CData}]}
         end,
     AttrLabels = lists:map(
@@ -754,7 +745,7 @@ make_el_enc_fun(Parents, Result, Labels, Name, XMLNS, Default, Min, Max) ->
                       lists:map(
                         fun(#spec{enc_f = F,
                                   result = Res}) ->
-                                ResWithVars = replace_labels_with_vars(Res),
+                                ResWithVars = labels_to_underscores(Res),
                                 erl_syntax:clause(
                                   [erl_syntax:match_expr(
                                      ResWithVars,
@@ -1047,7 +1038,7 @@ tuple_or_single_var([Var]) ->
 tuple_or_single_var([_|_] = Vars) ->
     erl_syntax:tuple(Vars).
 
-replace_labels_with_vars(Term) ->
+labels_to_underscores(Term) ->
     erl_syntax_lib:map(
       fun(T) ->
               try
@@ -1058,6 +1049,20 @@ replace_labels_with_vars(Term) ->
                       T
               end
       end, abstract(Term)).
+
+have_label(Term, Label) ->
+    erl_syntax_lib:fold(
+      fun(_, true) ->
+              true;
+         (T, false) ->
+              try
+                  L = erl_syntax:atom_value(T),
+                  true = is_label(L),
+                  Label == L
+              catch _:_ ->
+                      false
+              end
+      end, false, abstract(Term)).
 
 %%====================================================================
 %% Auxiliary functions
