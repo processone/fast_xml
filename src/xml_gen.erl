@@ -160,7 +160,8 @@ compile(TaggedElems, Forms, Path) ->
                                erl_syntax:atom(FN),
                                erl_syntax:integer(Arity))
                      end, Decoders ++ Encoders))]),
-    ResultAST = erl_syntax:form_list([Module, Exports|NewAST]),
+    Hdr = header(FileName),
+    ResultAST = erl_syntax:form_list([Hdr, Module, Exports|NewAST]),
     DirName = filename:dirname(Path),
     case file:write_file(
            filename:join([DirName, ModName ++ ".erl"]),
@@ -168,11 +169,18 @@ compile(TaggedElems, Forms, Path) ->
         ok ->
             file:write_file(
               filename:join([DirName, ModName ++ ".hrl"]),
-              [erl_prettypr:format(erl_syntax:form_list(RecordsAST)),
+              [erl_prettypr:format(erl_syntax:form_list([Hdr|RecordsAST])),
                io_lib:nl()]);
         Err ->
             Err
     end.
+
+header(FileName) ->
+    erl_syntax:comment(
+      0,
+      ["% Created automatically by XML generator (xml_gen.erl)",
+       "% Source: " ++ FileName,
+       "% Date: " ++ httpd_util:rfc1123_date()]).
 
 make_top_decoders(TaggedSpecs) ->
     Clauses = lists:map(
