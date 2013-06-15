@@ -728,8 +728,18 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
                                     [Var, erl_syntax:list([])])],
                                  _AccVar)]);
                        (#ref{name = RefName}) ->
+                            Pattern =
+                                if length(Refs) > 1 ->
+                                        RefElem = get_elem_by_ref(RefName, AllElems),
+                                        erl_syntax:match_expr(
+                                          labels_to_underscores(
+                                            RefElem#elem.result),
+                                          Var);
+                                   true ->
+                                        Var
+                                end,
                             erl_syntax:clause(
-                              [erl_syntax:list([Var], _ElsVar), _AccVar],
+                              [erl_syntax:list([Pattern], _ElsVar), _AccVar],
                               none,
                               [make_function_call(
                                  make_enc_fun_name([L,Tag]),
@@ -1258,7 +1268,17 @@ check_group(Label, Refs) ->
                 true ->
                     ok;
                 false ->
-                    bad_spec({wrong_min_max_in_group, Label})
+                    case lists:all(
+                           fun(#ref{min = 0, max = infinity}) ->
+                                   true;
+                              (_) ->
+                                   false
+                           end, Refs) of
+                        true ->
+                            ok;
+                        false ->
+                            bad_spec({wrong_min_max_in_group, Label})
+                    end
             end;
         false ->
             bad_spec({different_defaults_in_group, Label})
