@@ -149,7 +149,8 @@ compile(TaggedElems, Forms, Path) ->
                [erl_syntax:atom(list_to_atom(ModName))]),
     Decoders = make_top_decoders(TaggedElems),
     Encoders = make_top_encoders(TaggedElems),
-    NewAST = Decoders ++ Encoders ++ Forms ++ AST,
+    Printer = make_printer(TaggedElems),
+    NewAST = Decoders ++ Encoders ++ Printer ++ Forms ++ AST,
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
                 [erl_syntax:list(
@@ -159,7 +160,7 @@ compile(TaggedElems, Forms, Path) ->
                              erl_syntax:arity_qualifier(
                                erl_syntax:atom(FN),
                                erl_syntax:integer(Arity))
-                     end, Decoders ++ Encoders))]),
+                     end, [hd(Printer)|Decoders ++ Encoders]))]),
     Hdr = header(FileName),
     ResultAST = erl_syntax:form_list([Hdr, Module, Exports|NewAST]),
     DirName = filename:dirname(Path),
@@ -251,6 +252,41 @@ make_top_encoders(TaggedSpecs) ->
        true ->
             []
     end.
+
+make_printer(TaggedSpecs) ->
+    PassClause = erl_syntax:clause(
+                   [erl_syntax:underscore(),
+                    erl_syntax:underscore()],
+                   none,
+                   [erl_syntax:atom("no")]),
+    Clauses =
+        lists:foldl(
+          fun({_Tag, #elem{result = Result}}, Acc) ->
+                  try
+                      [H|T]= tuple_to_list(Result),
+                      true = is_atom(H),
+                      false = is_label(H),
+                      true = lists:all(fun is_label/1, T),
+                      [erl_syntax:clause(
+                         [erl_syntax:atom(H), abstract(length(T))],
+                         none,
+                         [erl_syntax:list(
+                            [label_to_record_field(F) || F <- T])])
+                       |Acc]
+                  catch _:_ ->
+                          Acc
+                  end
+          end, [PassClause], TaggedSpecs),
+    [make_function(
+       "pp",
+       [erl_syntax:variable("Term")],
+       [make_function_call(
+          io_lib_pretty, print,
+          [erl_syntax:variable("Term"),
+           erl_syntax:implicit_fun(
+             erl_syntax:atom("pp"),
+             abstract(2))])]),
+     erl_syntax:function(erl_syntax:atom("pp"), Clauses)].
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem1,
