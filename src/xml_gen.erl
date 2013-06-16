@@ -180,8 +180,7 @@ header(FileName) ->
     erl_syntax:comment(
       0,
       ["% Created automatically by XML generator (xml_gen.erl)",
-       "% Source: " ++ FileName,
-       "% Date: " ++ httpd_util:rfc1123_date()]).
+       "% Source: " ++ FileName]).
 
 make_top_decoders(TaggedSpecs) ->
     Clauses = lists:map(
