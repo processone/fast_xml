@@ -151,6 +151,7 @@ compile(TaggedElems, Forms, Path) ->
     Encoders = make_top_encoders(TaggedElems),
     Printer = make_printer(TaggedElems),
     NewAST = Decoders ++ Encoders ++ Printer ++ Forms ++ AST,
+    NewRecordsAST = [RecAST || {_, RecAST} <- lists:ukeysort(1, RecordsAST)],
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
                 [erl_syntax:list(
@@ -170,7 +171,7 @@ compile(TaggedElems, Forms, Path) ->
         ok ->
             file:write_file(
               filename:join([DirName, ModName ++ ".hrl"]),
-              [erl_prettypr:format(erl_syntax:form_list([Hdr|RecordsAST])),
+              [erl_prettypr:format(erl_syntax:form_list([Hdr|NewRecordsAST])),
                io_lib:nl()]);
         Err ->
             Err
@@ -223,6 +224,17 @@ make_top_decoders(TaggedSpecs) ->
           Clauses ++ [NilClause])])].
 
 make_top_encoders(TaggedSpecs) ->
+    RecNames = lists:foldl(
+                 fun({Tag, #elem{result = Result}}, Acc) ->
+                         try
+                             [H|_]= tuple_to_list(Result),
+                             true = is_atom(H),
+                             false = is_label(H),
+                             dict:append(H, Tag, Acc)
+                         catch _:_ ->
+                                 Acc
+                         end
+                 end, dict:new(), TaggedSpecs),
     Clauses =
         lists:flatmap(
           fun({Tag, #elem{name = Name, xmlns = XMLNS, result = Result}}) ->
@@ -232,6 +244,7 @@ make_top_encoders(TaggedSpecs) ->
                       [H|_]= tuple_to_list(Result),
                       true = is_atom(H),
                       false = is_label(H),
+                      [Tag] = dict:fetch(H, RecNames),
                       XMLNSAttrs = erl_syntax:list(
                                      [erl_syntax:tuple(
                                         [abstract(<<"xmlns">>),
@@ -258,13 +271,26 @@ make_printer(TaggedSpecs) ->
                     erl_syntax:underscore()],
                    none,
                    [erl_syntax:atom("no")]),
+    %% Exclude tags with duplicated results
+    RecNames = lists:foldl(
+                 fun({Tag, #elem{result = Result}}, Acc) ->
+                         try
+                             [H|_]= tuple_to_list(Result),
+                             true = is_atom(H),
+                             false = is_label(H),
+                             dict:append(H, Tag, Acc)
+                         catch _:_ ->
+                                 Acc
+                         end
+                 end, dict:new(), TaggedSpecs),
     Clauses =
         lists:foldl(
-          fun({_Tag, #elem{result = Result}}, Acc) ->
+          fun({Tag, #elem{result = Result}}, Acc) ->
                   try
                       [H|T]= tuple_to_list(Result),
                       true = is_atom(H),
                       false = is_label(H),
+                      [Tag|_] = dict:fetch(H, RecNames),
                       true = lists:all(fun is_label/1, T),
                       [erl_syntax:clause(
                          [erl_syntax:atom(H), abstract(length(T))],
@@ -1005,42 +1031,43 @@ make_record(#elem{result = Term} = Elem) ->
         true = is_atom(RecordName),
         false = is_label(RecordName),
         true = lists:all(fun is_label/1, RecordFields),
-        [erl_syntax:attribute(
-           erl_syntax:atom("record"),
-           [erl_syntax:atom(atom_to_list(RecordName)),
-            erl_syntax:tuple(
-              lists:map(
-                fun(Label) ->
-                        Field = label_to_record_field(Label),
-                        case get_spec_by_label(Label, Elem) of
-                            #ref{default = Default,
-                                 min = 0, max = 1}
-                              when Default /= undefined ->
-                                erl_syntax:match_expr(
-                                  Field,
-                                  erl_syntax:abstract(Default));
-                            #ref{max = Max} when Max > 1 ->
-                                erl_syntax:match_expr(
-                                  Field,
-                                  erl_syntax:abstract([]));
-                            #attr{default = Default}
-                              when Default /= undefined ->
-                                erl_syntax:match_expr(
-                                  Field,
-                                  erl_syntax:abstract(Default));
-                            #cdata{default = Default}
-                              when Default /= undefined ->
-                                erl_syntax:match_expr(
-                                  Field,
-                                  erl_syntax:abstract(Default));
-                            sub_els ->
-                                erl_syntax:match_expr(
-                                  Field,
-                                  erl_syntax:abstract([]));
-                            _ ->
-                                Field
-                        end
-                end, RecordFields))])]
+        [{RecordName,
+          erl_syntax:attribute(
+            erl_syntax:atom("record"),
+            [erl_syntax:atom(atom_to_list(RecordName)),
+             erl_syntax:tuple(
+               lists:map(
+                 fun(Label) ->
+                         Field = label_to_record_field(Label),
+                         case get_spec_by_label(Label, Elem) of
+                             #ref{default = Default,
+                                  min = 0, max = 1}
+                               when Default /= undefined ->
+                                 erl_syntax:match_expr(
+                                   Field,
+                                   erl_syntax:abstract(Default));
+                             #ref{max = Max} when Max > 1 ->
+                                 erl_syntax:match_expr(
+                                   Field,
+                                   erl_syntax:abstract([]));
+                             #attr{default = Default}
+                               when Default /= undefined ->
+                                 erl_syntax:match_expr(
+                                   Field,
+                                   erl_syntax:abstract(Default));
+                             #cdata{default = Default}
+                               when Default /= undefined ->
+                                 erl_syntax:match_expr(
+                                   Field,
+                                   erl_syntax:abstract(Default));
+                             sub_els ->
+                                 erl_syntax:match_expr(
+                                   Field,
+                                   erl_syntax:abstract([]));
+                             _ ->
+                                 Field
+                         end
+                 end, RecordFields))])}]
     catch _:_ ->
             []
     end.
