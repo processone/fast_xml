@@ -497,12 +497,19 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems, Result) ->
                                       make_function_call(
                                         make_dec_fun_name([RefName]),
                                         [erl_syntax:variable("_el")]);
-                                 ({L, _}) when L == Label ->
-                                      erl_syntax:list(
-                                        [make_function_call(
-                                           make_dec_fun_name([RefName]),
-                                           [erl_syntax:variable("_el")])],
-                                        Var);
+                                 ({L, [#ref{default = Def}]}) when L == Label ->
+                                      erl_syntax:case_expr(
+                                        make_function_call(
+                                          make_dec_fun_name([RefName]),
+                                          [erl_syntax:variable("_el")]),
+                                        [erl_syntax:clause(
+                                           [abstract(Def)], none, [Var]),
+                                         erl_syntax:clause(
+                                           [erl_syntax:variable("_new_el")],
+                                           none,
+                                           [erl_syntax:list(
+                                              [erl_syntax:variable("_new_el")],
+                                              Var)])]);
                                  ({L, _}) ->
                                       label_to_var(L)
                               end, group_refs(Refs)),
