@@ -713,7 +713,7 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
             []
     end.
 
-make_ref_enc_funs(Elem, Tag, AllElems) ->
+make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
     _AccVar = erl_syntax:variable("_acc"),
     _ElsVar = erl_syntax:variable("_els"),
     lists:map(
@@ -734,9 +734,18 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
                   lists:map(
                     fun(#ref{name = RefName,
                              min = 0, max = 1}) ->
+                            RefElem = get_elem_by_ref(RefName, AllElems),
+                            XMLNS = RefElem#elem.xmlns,
+                            XMLNSAttrs = if TopXMLNS == XMLNS ->
+                                                 erl_syntax:list([]);
+                                            true ->
+                                                 erl_syntax:list(
+                                                   [erl_syntax:tuple(
+                                                      [abstract(<<"xmlns">>),
+                                                       abstract(XMLNS)])])
+                                         end,
                             Pattern =
                                 if length(Refs) > 1 ->
-                                        RefElem = get_elem_by_ref(RefName, AllElems),
                                         MatchVar = erl_syntax:match_expr(
                                                      labels_to_underscores(
                                                        RefElem#elem.result),
@@ -751,21 +760,40 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
                               [erl_syntax:list(
                                  [make_function_call(
                                     make_enc_fun_name([RefName]),
-                                    [Var, erl_syntax:list([])])],
+                                    [Var, XMLNSAttrs])],
                                  _AccVar)]);
                        (#ref{name = RefName, min = 1, max = 1}) ->
+                            RefElem = get_elem_by_ref(RefName, AllElems),
+                            XMLNS = RefElem#elem.xmlns,
+                            XMLNSAttrs = if TopXMLNS == XMLNS ->
+                                                 erl_syntax:list([]);
+                                            true ->
+                                                 erl_syntax:list(
+                                                   [erl_syntax:tuple(
+                                                      [abstract(<<"xmlns">>),
+                                                       abstract(XMLNS)])])
+                                         end,
                             erl_syntax:clause(
                               [Var, _AccVar],
                               none,
                               [erl_syntax:list(
                                  [make_function_call(
                                     make_enc_fun_name([RefName]),
-                                    [Var, erl_syntax:list([])])],
+                                    [Var, XMLNSAttrs])],
                                  _AccVar)]);
                        (#ref{name = RefName}) ->
+                            RefElem = get_elem_by_ref(RefName, AllElems),
+                            XMLNS = RefElem#elem.xmlns,
+                            XMLNSAttrs = if TopXMLNS == XMLNS ->
+                                                 erl_syntax:list([]);
+                                            true ->
+                                                 erl_syntax:list(
+                                                   [erl_syntax:tuple(
+                                                      [abstract(<<"xmlns">>),
+                                                       abstract(XMLNS)])])
+                                         end,
                             Pattern =
                                 if length(Refs) > 1 ->
-                                        RefElem = get_elem_by_ref(RefName, AllElems),
                                         erl_syntax:match_expr(
                                           labels_to_underscores(
                                             RefElem#elem.result),
@@ -782,7 +810,7 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
                                   erl_syntax:list(
                                     [make_function_call(
                                        make_enc_fun_name([RefName]),
-                                       [Var, erl_syntax:list([])])],
+                                       [Var, XMLNSAttrs])],
                                     _AccVar)])])
                     end, Refs),
               erl_syntax:function(
