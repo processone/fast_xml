@@ -27,8 +27,6 @@
 -define(info(F, Args), io:format("xml_gen: " ++ F ++ "~n", Args)).
 -define(warn(F, Args), io:format("* xml_gen warning: " ++ F ++ "~n", Args)).
 
--record(state, {ast = [], all_elems = [], known_functions = [], records = []}).
-
 %%====================================================================
 %% Compiler API
 %%====================================================================
@@ -137,13 +135,10 @@ compile(TaggedElems, Forms, Path) ->
     end,
     FileName = filename:basename(Path),
     ModName = filename:rootname(FileName),
-    #state{ast = AST, records = RecordsAST} =
-        lists:foldl(
-          fun({Tag, Elem}, State) ->
-                  elem_to_AST(Elem, Tag, State)
-          end, #state{all_elems = TaggedElems,
-                      known_functions = KnownFuns},
-          TaggedElems),
+    AST = lists:flatmap(
+            fun({Tag, Elem}) ->
+                    elem_to_AST(Elem, Tag, KnownFuns, TaggedElems)
+            end, TaggedElems),
     Module = erl_syntax:attribute(
                erl_syntax:atom("module"),
                [erl_syntax:atom(list_to_atom(ModName))]),
@@ -151,7 +146,8 @@ compile(TaggedElems, Forms, Path) ->
     Encoders = make_top_encoders(TaggedElems),
     Printer = make_printer(TaggedElems),
     NewAST = Decoders ++ Encoders ++ Printer ++ Forms ++ AST,
-    NewRecordsAST = [RecAST || {_, RecAST} <- lists:ukeysort(1, RecordsAST)],
+    Types = get_types(TaggedElems),
+    Records = make_records(Types),
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
                 [erl_syntax:list(
@@ -171,11 +167,56 @@ compile(TaggedElems, Forms, Path) ->
         ok ->
             file:write_file(
               filename:join([DirName, ModName ++ ".hrl"]),
-              [erl_prettypr:format(erl_syntax:form_list([Hdr|NewRecordsAST])),
+              [erl_prettypr:format(Hdr),
+               io_lib:nl(),
+               string:join(Records, io_lib:nl() ++ io_lib:nl()),
                io_lib:nl()]);
         Err ->
             Err
     end.
+
+make_records(Types) ->
+    D = dict:from_list(
+          lists:flatmap(
+            fun({_, {record, RecName, _}}) ->
+                    [{{record, RecName}, [{0, []}]}];
+               (_) ->
+                    []
+            end, Types)),
+    {Strings, _} = lists:foldr(
+                     fun({_, {record, RecName, _} = R}, {Res, Seen}) ->
+                             case lists:member(RecName, Seen) of
+                                 false ->
+                                     {[record_to_string(R, D)|Res],
+                                      [RecName|Seen]};
+                                 true ->
+                                     {Res, Seen}
+                             end;
+                        (_, Acc) ->
+                             Acc
+                     end, {[], []}, Types),
+    Strings.
+
+atom_to_string(Atom) ->
+    erl_syntax:atom_literal(abstract(Atom)).
+
+record_to_string({record, RecName, RecFields}, RecDict) ->
+    Prefix = "-record(" ++ atom_to_string(RecName) ++ ", {",
+    Sep = "," ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
+    Fs = lists:map(
+           fun({FName, {FType, undefined}}) ->
+                   [atom_to_string(FName), " :: ",
+                    erl_types:t_to_string(FType, RecDict)];
+              ({FName, {FType, Default}}) ->
+                   Type = erl_types:t_sup(
+                            [erl_types:t_from_term(Default),
+                             FType]),
+                   [atom_to_string(FName), " = ",
+                    io_lib:fwrite("~w", [Default]),
+                    " :: ",
+                    erl_types:t_to_string(Type, RecDict)]
+           end, RecFields),
+    [Prefix, string:join(Fs, Sep), "})."].
 
 header(FileName) ->
     erl_syntax:comment(
@@ -296,7 +337,8 @@ make_printer(TaggedSpecs) ->
                          [erl_syntax:atom(H), abstract(length(T))],
                          none,
                          [erl_syntax:list(
-                            [label_to_record_field(F) || F <- T])])
+                            [erl_syntax:atom(
+                               label_to_record_field(F)) || F <- T])])
                        |Acc]
                   catch _:_ ->
                           Acc
@@ -315,10 +357,8 @@ make_printer(TaggedSpecs) ->
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem1,
-            Tag, #state{known_functions = KnownFuns,
-                        all_elems = AllElems} = State) ->
+            Tag, KnownFuns, AllElems) ->
     Elem = prepare_elem(Elem1, KnownFuns, AllElems),
-    NewState = State,
     AttrAST = lists:flatmap(
                 fun(#attr{name = AttrName,
                           required = Required,
@@ -352,10 +392,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
         end,
     DecAST = make_elem_dec_fun(Elem, Tag, AllElems),
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems),
-    NewRecords = make_record(Elem) ++ NewState#state.records,
-    NewState#state{ast = DecAST ++ EncAST ++ AttrAST ++
-                       CDataAST ++ NewState#state.ast,
-                   records = NewRecords}.
+    DecAST ++ EncAST ++ AttrAST ++ CDataAST.
 
 %% Replace in `Term' every label found in `Labels'
 %% with the corresponding value.
@@ -378,7 +415,7 @@ get_elem_by_ref(RefName, TaggedElems) ->
 get_spec_by_label('$_els', _Elem) ->
     sub_els;
 get_spec_by_label(Label, Elem) ->
-    [Spec|_] = lists:flatmap(
+    [Spec|T] = lists:flatmap(
                  fun(#cdata{label = L} = CData) when Label == L ->
                          [CData];
                     (#attr{label = L, name = N} = Attr) ->
@@ -398,7 +435,11 @@ get_spec_by_label(Label, Elem) ->
                     (_) ->
                          []
                  end, [Elem#elem.cdata|Elem#elem.attrs ++ Elem#elem.refs]),
-    Spec.
+    if is_record(Spec, ref) ->
+            [Spec|T];
+       true ->
+            Spec
+    end.
 
 group_refs(Refs) ->
     dict:to_list(
@@ -1025,53 +1066,6 @@ make_enc_fun_name(Vars) ->
                 end, [], Vars),
     "encode_" ++ string:join(NewVars, "_").
 
-make_record(#elem{result = Term} = Elem) ->
-    try
-        [RecordName|RecordFields] = tuple_to_list(Term),
-        true = is_atom(RecordName),
-        false = is_label(RecordName),
-        true = lists:all(fun is_label/1, RecordFields),
-        [{RecordName,
-          erl_syntax:attribute(
-            erl_syntax:atom("record"),
-            [erl_syntax:atom(atom_to_list(RecordName)),
-             erl_syntax:tuple(
-               lists:map(
-                 fun(Label) ->
-                         Field = label_to_record_field(Label),
-                         case get_spec_by_label(Label, Elem) of
-                             #ref{default = Default,
-                                  min = 0, max = 1}
-                               when Default /= undefined ->
-                                 erl_syntax:match_expr(
-                                   Field,
-                                   erl_syntax:abstract(Default));
-                             #ref{max = Max} when Max > 1 ->
-                                 erl_syntax:match_expr(
-                                   Field,
-                                   erl_syntax:abstract([]));
-                             #attr{default = Default}
-                               when Default /= undefined ->
-                                 erl_syntax:match_expr(
-                                   Field,
-                                   erl_syntax:abstract(Default));
-                             #cdata{default = Default}
-                               when Default /= undefined ->
-                                 erl_syntax:match_expr(
-                                   Field,
-                                   erl_syntax:abstract(Default));
-                             sub_els ->
-                                 erl_syntax:match_expr(
-                                   Field,
-                                   erl_syntax:abstract([]));
-                             _ ->
-                                 Field
-                         end
-                 end, RecordFields))])}]
-    catch _:_ ->
-            []
-    end.
-
 %% Fun(Args) -> Body.
 make_function(Fun, Args, Body) ->
     erl_syntax:function(
@@ -1125,9 +1119,9 @@ replace_invalid_chars([]) ->
 label_to_record_field(Label) ->
     case atom_to_list(Label) of
         "$_els" ->
-            erl_syntax:atom("sub_els");
+            sub_els;
         [$$|T] ->
-            erl_syntax:atom(T)
+            list_to_atom(T)
     end.
 
 prepare_label(Label, Name) when is_atom(Name) ->
@@ -1186,6 +1180,150 @@ have_label(Term, Label) ->
                       false
               end
       end, false, abstract(Term)).
+
+get_fun_return_type({dec_enum, [Atoms]}) ->
+    erl_types:t_atoms(Atoms);
+get_fun_return_type({dec_int, [Min, _]}) ->
+    if Min > 0 ->
+            erl_types:t_pos_integer();
+       Min == 0 ->
+            erl_types:t_non_neg_integer();
+       Min < 0 ->
+            erl_types:t_integer()
+    end;
+get_fun_return_type({dec_int, []}) ->
+    erl_types:t_integer();
+get_fun_return_type(undefined) ->
+    erl_types:t_binary();
+get_fun_return_type(_) ->
+    erl_types:t_var('any()').
+
+term_is_record(Term) ->
+    try
+        [H|T]= tuple_to_list(Term),
+        true = is_atom(H),
+        false = is_label(H),
+        lists:all(fun is_label/1, T)
+    catch _:_ ->
+            false
+    end.
+
+term_to_t([H|T], LabelTypes) ->
+    erl_types:t_cons(term_to_t(H, LabelTypes), term_to_t(T, LabelTypes));
+term_to_t([], _LabelTypes) ->
+    erl_types:t_nil();
+term_to_t(T, LabelTypes) when is_atom(T) ->
+    case is_label(T) of
+        true ->
+            {_, {Type, _Default}} = lists:keyfind(T, 1, LabelTypes),
+            Type;
+        false ->
+            erl_types:t_atom(T)
+    end;
+term_to_t(T, _LabelTypes) when is_bitstring(T) ->
+    erl_types:t_bitstr(0, erlang:bit_size(T));
+term_to_t(T, _LabelTypes) when is_float(T) ->
+    erl_types:t_float();
+term_to_t(T, _LabelTypes) when is_function(T) ->
+    {arity, Arity} = erlang:fun_info(T, arity),
+    erl_types:t_fun(Arity, erl_types:t_any());
+term_to_t(T, _LabelTypes) when is_integer(T) ->
+    erl_types:t_integer(T);
+term_to_t(T, _LabelTypes) when is_pid(T) ->
+    erl_types:t_pid();
+term_to_t(T, _LabelTypes) when is_port(T) ->
+    erl_types:t_port();
+term_to_t(T, _LabelTypes) when is_reference(T) ->
+    erl_types:t_reference();
+term_to_t(T, LabelTypes) when is_tuple(T) ->
+    case term_is_record(T) of
+        true ->
+            [RecName|Labels] = tuple_to_list(T),
+            RecFields = lists:map(
+                          fun(Label) ->
+                                  {_, Type} = lists:keyfind(Label, 1,
+                                                            LabelTypes),
+                                  {label_to_record_field(Label), Type}
+                          end, Labels),
+            {record, RecName, RecFields};
+        false ->
+            erl_types:t_tuple(
+              [term_to_t(E, LabelTypes) || E <- tuple_to_list(T)])
+    end.
+
+get_types(TaggedElems) ->
+    G = build_ref_deps(TaggedElems),
+    SortedTags = digraph_utils:topsort(G),
+    D = lists:foldl(
+          fun(RefName, Dict) ->
+                  RefElem = get_elem_by_ref(RefName, TaggedElems),
+                  Result = RefElem#elem.result,
+                  Labels = extract_labels_from_term(Result),
+                  LabelTypes =
+                      lists:map(
+                        fun(Label) ->
+                                {Label, get_label_type(Label, RefElem, Dict)}
+                        end, Labels),
+                  Type = term_to_t(Result, LabelTypes),
+                  dict:store(RefName, Type, Dict)
+          end, dict:new(), SortedTags),
+    lists:map(
+      fun(Tag) ->
+              {Tag, dict:fetch(Tag, D)}
+      end, SortedTags).
+
+extract_labels_from_term(Term) ->
+    erl_syntax_lib:fold(
+      fun(T, Acc) ->
+              try
+                  Label = erl_syntax:atom_value(T),
+                  true = is_label(Label),
+                  [Label|Acc]
+              catch _:_ ->
+                      Acc
+              end
+      end, [], abstract(Term)).
+
+get_label_type(Label, Elem, Dict) ->
+    case get_spec_by_label(Label, Elem) of
+        sub_els ->
+            {erl_types:t_list(), []};
+        #attr{dec = DecFun, default = Default} ->
+            {get_fun_return_type(DecFun), Default};
+        #cdata{dec = DecFun, default = Default} ->
+            {get_fun_return_type(DecFun), Default};
+        [#ref{max = Max, default = Default}|_] = Refs ->
+            Types =
+                lists:map(
+                  fun(#ref{name = RefTag}) ->
+                          case dict:fetch(RefTag, Dict) of
+                              {record, RecName, _} ->
+                                  erl_types:t_tuple(
+                                    [erl_types:t_atom(RecName)]);
+                              T ->
+                                  T
+                          end
+                  end, Refs),
+            Type = erl_types:t_sup(Types),
+            if Max == 1 ->
+                    {Type, Default};
+               true ->
+                    {erl_types:t_list(Type), []}
+            end
+    end.
+
+build_ref_deps(TaggedElems) ->
+    G = digraph:new([acyclic]),
+    lists:foreach(
+      fun({Tag, Elem}) ->
+              digraph:add_vertex(G, Tag),
+              lists:foreach(
+                fun(#ref{name = RefTag}) ->
+                        digraph:add_vertex(G, RefTag),
+                        digraph:add_edge(G, RefTag, Tag)
+                end, Elem#elem.refs)
+      end, TaggedElems),
+    G.
 
 %%====================================================================
 %% Auxiliary functions
