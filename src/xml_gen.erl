@@ -1350,9 +1350,7 @@ prepare_elem(#elem{name = Name, attrs = Attrs, cdata = CData, refs = Refs} = Ele
                 fun(Ref) -> prepare_ref(Name, Ref, AllElems) end,
                 Refs),
     check_labels(Elem),
-    Elem#elem{attrs = NewAttrs, cdata = NewCData, refs = NewRefs};
-prepare_elem(Junk, _, _) ->
-    bad_spec({not_elem_spec, Junk}).
+    Elem#elem{attrs = NewAttrs, cdata = NewCData, refs = NewRefs}.
 
 prepare_ref(Name, #ref{name = RefName}, _)
   when not is_atom(RefName) ->
