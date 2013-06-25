@@ -135,9 +135,12 @@ compile(TaggedElems, Forms, Path) ->
     end,
     FileName = filename:basename(Path),
     ModName = filename:rootname(FileName),
+    DirName = filename:dirname(Path),
+    Types = get_types(TaggedElems),
     AST = lists:flatmap(
             fun({Tag, Elem}) ->
-                    elem_to_AST(Elem, Tag, KnownFuns, TaggedElems)
+                    Elem1 = prepare_elem(Elem, KnownFuns, TaggedElems),
+                    elem_to_AST(Elem1, Tag, TaggedElems, Types)
             end, TaggedElems),
     Module = erl_syntax:attribute(
                erl_syntax:atom("module"),
@@ -145,9 +148,13 @@ compile(TaggedElems, Forms, Path) ->
     Decoders = make_top_decoders(TaggedElems),
     Encoders = make_top_encoders(TaggedElems),
     Printer = make_printer(TaggedElems),
-    NewAST = Decoders ++ Encoders ++ Printer ++ Forms ++ AST,
-    Types = get_types(TaggedElems),
-    Records = make_records(Types),
+    %% Includes = [erl_syntax:attribute(erl_syntax:atom("include"),
+    %%                                  [abstract(ModName ++ ".hrl")]),
+    %%             erl_syntax:attribute(erl_syntax:atom("include"),
+    %%                                  [abstract("xml.hrl")])],
+    Includes = [],
+    NewAST = Includes ++ Decoders ++ Encoders ++ Printer ++ Forms ++ AST,
+    Records = make_records(Types, TaggedElems),
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
                 [erl_syntax:list(
@@ -160,7 +167,6 @@ compile(TaggedElems, Forms, Path) ->
                      end, [hd(Printer)|Decoders ++ Encoders]))]),
     Hdr = header(FileName),
     ResultAST = erl_syntax:form_list([Hdr, Module, Exports|NewAST]),
-    DirName = filename:dirname(Path),
     case file:write_file(
            filename:join([DirName, ModName ++ ".erl"]),
            [erl_prettypr:format(ResultAST), io_lib:nl()]) of
@@ -175,47 +181,55 @@ compile(TaggedElems, Forms, Path) ->
             Err
     end.
 
-make_records(Types) ->
-    D = dict:from_list(
-          lists:flatmap(
-            fun({_, {record, RecName, _}}) ->
-                    [{{record, RecName}, [{0, []}]}];
-               (_) ->
-                    []
-            end, Types)),
-    {Strings, _} = lists:foldr(
-                     fun({_, {record, RecName, _} = R}, {Res, Seen}) ->
-                             case lists:member(RecName, Seen) of
-                                 false ->
-                                     {[record_to_string(R, D)|Res],
-                                      [RecName|Seen]};
-                                 true ->
-                                     {Res, Seen}
-                             end;
-                        (_, Acc) ->
-                             Acc
-                     end, {[], []}, Types),
+make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
+    {Strings, _} =
+        lists:foldr(
+          fun(Tag, {Res, Seen}) ->
+                  RefElem = get_elem_by_ref(Tag, TaggedElems),
+                  Result = RefElem#elem.result,
+                  case term_is_record(Result) of
+                      true ->
+                          RecName = element(1, Result),
+                          case lists:member(RecName, Seen) of
+                              false ->
+                                  {[record_to_string(RefElem, RecDict,
+                                                     TypesDict)|Res],
+                                   [RecName|Seen]};
+                              true ->
+                                  {Res, Seen}
+                          end;
+                      false ->
+                          {Res, Seen}
+                  end
+          end, {[], []}, Tags),
     Strings.
 
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
 
-record_to_string({record, RecName, RecFields}, RecDict) ->
+record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes) ->
+    [RecName|RecLabels] = tuple_to_list(Result),
     Prefix = "-record(" ++ atom_to_string(RecName) ++ ", {",
     Sep = "," ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
     Fs = lists:map(
-           fun({FName, {FType, undefined}}) ->
-                   [atom_to_string(FName), " :: ",
-                    erl_types:t_to_string(FType, RecDict)];
-              ({FName, {FType, Default}}) ->
-                   Type = erl_types:t_sup(
-                            [erl_types:t_from_term(Default),
-                             FType]),
-                   [atom_to_string(FName), " = ",
-                    io_lib:fwrite("~w", [Default]),
-                    " :: ",
-                    erl_types:t_to_string(Type, RecDict)]
-           end, RecFields),
+           fun(Label) ->
+                   FName = label_to_record_field(Label),
+                   case get_label_type(Label, Elem, RecTypes) of
+                       {FType, undefined, _} ->
+                           FType1 = erl_types:t_subtract(
+                                      FType, erl_types:t_atom(undefined)),
+                           [atom_to_string(FName), " :: ",
+                            erl_types:t_to_string(FType1, RecDict)];
+                       {FType, Default, _} ->
+                           Type = erl_types:t_sup(
+                                    [erl_types:t_from_term(Default),
+                                     FType]),
+                           [atom_to_string(FName), " = ",
+                            io_lib:fwrite("~w", [Default]),
+                            " :: ",
+                            erl_types:t_to_string(Type, RecDict)]
+                   end
+           end, RecLabels),
     [Prefix, string:join(Fs, Sep), "})."].
 
 header(FileName) ->
@@ -356,22 +370,21 @@ make_printer(TaggedSpecs) ->
      erl_syntax:function(erl_syntax:atom("pp"), Clauses)].
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
-                  result = Result, attrs = Attrs, refs = _Refs} = Elem1,
-            Tag, KnownFuns, AllElems) ->
-    Elem = prepare_elem(Elem1, KnownFuns, AllElems),
+                  result = Result, attrs = Attrs, refs = _Refs} = Elem,
+            Tag, AllElems, Types) ->
     AttrAST = lists:flatmap(
                 fun(#attr{name = AttrName,
                           required = Required,
                           dec = AttrDecF,
                           enc = AttrEncF,
                           default = AttrDefault}) ->
-                        [make_decoding_MFA([AttrName,attr,Tag],
-                                           Name, XMLNS, AttrName,
-                                           Required, AttrDefault,
-                                           prepare_MFA(AttrDecF, KnownFuns)),
-                         make_encoding_MFA([AttrName,attr,Tag],
-                                           AttrName, Required, AttrDefault,
-                                           prepare_MFA(AttrEncF, KnownFuns))]
+                        make_decoding_MFA([AttrName,attr,Tag],
+                                          Name, XMLNS, AttrName,
+                                          Required, AttrDefault,
+                                          AttrDecF, Types) ++
+                            make_encoding_MFA([AttrName,attr,Tag],
+                                              AttrName, Required, AttrDefault,
+                                              AttrEncF)
                 end, Attrs),
     #cdata{label = CDataLabl,
            required = CDataRequired,
@@ -381,16 +394,16 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
     CDataAST =
         case have_label(Result, CDataLabl) of
             true ->
-                [make_decoding_MFA([cdata,Tag], Name, XMLNS, <<>>,
-                                   CDataRequired, CDataDefault,
-                                   prepare_MFA(CDataDecF, KnownFuns)),
-                 make_encoding_MFA([cdata,Tag], <<>>,
-                                   CDataRequired, CDataDefault,
-                                   prepare_MFA(CDataEncF, KnownFuns))];
+                make_decoding_MFA([cdata,Tag], Name, XMLNS, <<>>,
+                                  CDataRequired, CDataDefault,
+                                  CDataDecF, Types) ++
+                    make_encoding_MFA([cdata,Tag], <<>>,
+                                      CDataRequired, CDataDefault,
+                                      CDataEncF);
             false ->
                 []
         end,
-    DecAST = make_elem_dec_fun(Elem, Tag, AllElems),
+    DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types),
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems),
     DecAST ++ EncAST ++ AttrAST ++ CDataAST.
 
@@ -451,7 +464,7 @@ group_refs(Refs) ->
 
 make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs,
                         cdata = CData, attrs = Attrs, xmlns = XMLNS},
-                  Tag, AllElems) ->
+                  Tag, AllElems, Types) ->
     FunName = make_dec_fun_name([Tag]),
     ResultWithVars = subst_labels(Result),
     AttrVars = lists:map(
@@ -517,10 +530,11 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs,
                           erl_syntax:variable("_els")])],
        ElCDataMatch ++ AttrMatch ++ [ResultWithVars])]
         ++ make_els_dec_fun(FunName ++ "_els", CData, HaveCData, SubElVars,
-                            Refs, Tag, XMLNS, AllElems, Result)
+                            Refs, Tag, XMLNS, AllElems, Result, Types)
         ++ make_attrs_dec_fun(FunName ++ "_attrs", Attrs, Tag).
 
-make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems, Result) ->
+make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
+                    Result, {_SortedTags, Types, _RecDict}) ->
     ElemVars = lists:map(
                  fun({Label, _}) ->
                          label_to_var(Label)
@@ -565,18 +579,28 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems, Result) ->
                                         make_dec_fun_name([RefName]),
                                         [erl_syntax:variable("_el")]);
                                  ({L, [#ref{default = Def}]}) when L == Label ->
-                                      erl_syntax:case_expr(
-                                        make_function_call(
-                                          make_dec_fun_name([RefName]),
-                                          [erl_syntax:variable("_el")]),
-                                        [erl_syntax:clause(
-                                           [abstract(Def)], none, [Var]),
-                                         erl_syntax:clause(
-                                           [erl_syntax:variable("_new_el")],
-                                           none,
-                                           [erl_syntax:list(
-                                              [erl_syntax:variable("_new_el")],
-                                              Var)])]);
+                                      RefType = dict:fetch(RefName, Types),
+                                      case is_subtype(Def, RefType) of
+                                          true ->
+                                              erl_syntax:case_expr(
+                                                make_function_call(
+                                                  make_dec_fun_name([RefName]),
+                                                  [erl_syntax:variable("_el")]),
+                                                [erl_syntax:clause(
+                                                   [abstract(Def)], none, [Var]),
+                                                 erl_syntax:clause(
+                                                   [erl_syntax:variable("_new_el")],
+                                                   none,
+                                                   [erl_syntax:list(
+                                                      [erl_syntax:variable("_new_el")],
+                                                      Var)])]);
+                                          false ->
+                                              erl_syntax:list(
+                                                [make_function_call(
+                                                   make_dec_fun_name([RefName]),
+                                                   [erl_syntax:variable("_el")])],
+                                                Var)
+                                      end;
                                  ({L, _}) ->
                                       label_to_var(L)
                               end, group_refs(Refs)),
@@ -607,10 +631,10 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems, Result) ->
       end, Refs).
 
 make_els_dec_fun(_FunName, _CData, false, [], [], _Tag,
-                 _TopXMLNS, _AllElems, _Result) ->
+                 _TopXMLNS, _AllElems, _Result, _Types) ->
     [];
 make_els_dec_fun(FunName, CData, HaveCData, SubElVars, Refs, Tag,
-                 TopXMLNS, AllElems, Result) ->
+                 TopXMLNS, AllElems, Result, Types) ->
     CDataVars = if HaveCData ->
                         [label_to_var(CData#cdata.label)];
                    true ->
@@ -649,7 +673,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, Refs, Tag,
                           []
                   end,
     ElemClauses = make_els_dec_clause(FunName, CDataVars,
-                                      Refs, TopXMLNS, AllElems, Result),
+                                      Refs, TopXMLNS, AllElems, Result, Types),
     ResultElems = lists:map(
                     fun({L, [#ref{max = 1}|_]}) ->
                             label_to_var(L);
@@ -946,7 +970,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
           ])])] ++ make_ref_enc_funs(Elem, Tag, AllElems).
 
 make_decoding_MFA(Parents, TagName, TagNS, AttrName,
-                  IsRequired, Default, DecMFA) ->
+                  IsRequired, Default, DecMFA, _Types) ->
     FunName = make_dec_fun_name(Parents),
     Type = case AttrName of
                <<>> -> "cdata";
@@ -1004,7 +1028,7 @@ make_decoding_MFA(Parents, TagName, TagNS, AttrName,
                          [erl_syntax:variable("_res")])])
             end,
     Clause2 = erl_syntax:clause([erl_syntax:variable("_val")], none, [Catch]),
-    erl_syntax:function(erl_syntax:atom(FunName), [Clause1, Clause2]).
+    [erl_syntax:function(erl_syntax:atom(FunName), [Clause1, Clause2])].
 
 make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
     Clause1 = if Required ->
@@ -1040,9 +1064,9 @@ make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
                            true -> erl_syntax:atom("xmlcdata")
                         end, Body])],
                     erl_syntax:variable("_acc"))])],
-    erl_syntax:function(
-      erl_syntax:atom(make_enc_fun_name(Parents)),
-      Clause1 ++ Clause2).
+    [erl_syntax:function(
+       erl_syntax:atom(make_enc_fun_name(Parents)),
+       Clause1 ++ Clause2)].
 
 make_dec_fun_name(Vars) ->
     NewVars = lists:foldl(
@@ -1140,16 +1164,6 @@ prepare_label(Label, Name) ->
 	    ?err("bad 'label': ~p", [Label])
     end.
 
-prepare_MFA({F, A}, KnownFuns) ->
-    case lists:member({F, length(A)+1}, KnownFuns) of
-        true ->
-            {F, A};
-        false ->
-            {?MODULE, F, A}
-    end;
-prepare_MFA(MFA, _) ->
-    MFA.
-
 tuple_or_single_var([Var]) ->
     Var;
 tuple_or_single_var([_|_] = Vars) ->
@@ -1215,8 +1229,12 @@ term_to_t([], _LabelTypes) ->
 term_to_t(T, LabelTypes) when is_atom(T) ->
     case is_label(T) of
         true ->
-            {_, {Type, _Default}} = lists:keyfind(T, 1, LabelTypes),
-            Type;
+            {_, {Type, Default, IsRequired}} = lists:keyfind(T, 1, LabelTypes),
+            if IsRequired ->
+                    Type;
+               true ->
+                    erl_types:t_sup(Type, erl_types:t_from_term(Default))
+            end;
         false ->
             erl_types:t_atom(T)
     end;
@@ -1238,39 +1256,45 @@ term_to_t(T, _LabelTypes) when is_reference(T) ->
 term_to_t(T, LabelTypes) when is_tuple(T) ->
     case term_is_record(T) of
         true ->
-            [RecName|Labels] = tuple_to_list(T),
-            RecFields = lists:map(
-                          fun(Label) ->
-                                  {_, Type} = lists:keyfind(Label, 1,
-                                                            LabelTypes),
-                                  {label_to_record_field(Label), Type}
-                          end, Labels),
-            {record, RecName, RecFields};
+            RecName = element(1, T),
+            erl_types:t_tuple([term_to_t(RecName, LabelTypes)]);
         false ->
             erl_types:t_tuple(
               [term_to_t(E, LabelTypes) || E <- tuple_to_list(T)])
     end.
 
+is_subtype(Term, Type) ->
+    erl_types:t_is_subtype(erl_types:t_from_term(Term), Type).
+
 get_types(TaggedElems) ->
     G = build_ref_deps(TaggedElems),
     SortedTags = digraph_utils:topsort(G),
-    D = lists:foldl(
-          fun(RefName, Dict) ->
-                  RefElem = get_elem_by_ref(RefName, TaggedElems),
-                  Result = RefElem#elem.result,
-                  Labels = extract_labels_from_term(Result),
-                  LabelTypes =
-                      lists:map(
-                        fun(Label) ->
-                                {Label, get_label_type(Label, RefElem, Dict)}
-                        end, Labels),
-                  Type = term_to_t(Result, LabelTypes),
-                  dict:store(RefName, Type, Dict)
-          end, dict:new(), SortedTags),
-    lists:map(
-      fun(Tag) ->
-              {Tag, dict:fetch(Tag, D)}
-      end, SortedTags).
+    TypesDict = lists:foldl(
+                  fun(RefName, Dict) ->
+                          RefElem = get_elem_by_ref(RefName, TaggedElems),
+                          Result = RefElem#elem.result,
+                          Labels = extract_labels_from_term(Result),
+                          LabelTypes =
+                              lists:map(
+                                fun(Label) ->
+                                        {Label, get_label_type(Label, RefElem, Dict)}
+                                end, Labels),
+                          Type = term_to_t(Result, LabelTypes),
+                          dict:store(RefName, Type, Dict)
+                  end, dict:new(), SortedTags),
+    RecDict = dict:from_list(
+                lists:flatmap(
+                  fun({Tag, _T}) ->
+                          RefElem = get_elem_by_ref(Tag, TaggedElems),
+                          case term_is_record(RefElem#elem.result) of
+                              true ->
+                                  RecName = element(1, RefElem#elem.result),
+                                  [{{record, RecName}, [{0, []}]}];
+                              false ->
+                                  []
+                          end
+                  end, dict:to_list(TypesDict))),
+    {digraph_utils:topsort(G), TypesDict, RecDict}.
 
 extract_labels_from_term(Term) ->
     erl_syntax_lib:fold(
@@ -1287,28 +1311,25 @@ extract_labels_from_term(Term) ->
 get_label_type(Label, Elem, Dict) ->
     case get_spec_by_label(Label, Elem) of
         sub_els ->
-            {erl_types:t_list(), []};
-        #attr{dec = DecFun, default = Default} ->
-            {get_fun_return_type(DecFun), Default};
-        #cdata{dec = DecFun, default = Default} ->
-            {get_fun_return_type(DecFun), Default};
-        [#ref{max = Max, default = Default}|_] = Refs ->
-            Types =
-                lists:map(
-                  fun(#ref{name = RefTag}) ->
-                          case dict:fetch(RefTag, Dict) of
-                              {record, RecName, _} ->
-                                  erl_types:t_tuple(
-                                    [erl_types:t_atom(RecName)]);
-                              T ->
-                                  T
-                          end
-                  end, Refs),
+            {erl_types:t_list(), [], false};
+        #attr{dec = DecFun, default = Default, required = IsRequired} ->
+            {get_fun_return_type(DecFun), Default, IsRequired};
+        #cdata{dec = DecFun, default = Default, required = IsRequired} ->
+            {get_fun_return_type(DecFun), Default, IsRequired};
+        [#ref{min = Min, max = Max, default = Default}|_] = Refs ->
+            Types = lists:map(
+                      fun(#ref{name = RefTag}) ->
+                              dict:fetch(RefTag, Dict)
+                      end, Refs),
             Type = erl_types:t_sup(Types),
+            IsRequired = (Min == 1) and (Max == 1),
             if Max == 1 ->
-                    {Type, Default};
+                    {Type, Default, IsRequired};
                true ->
-                    {erl_types:t_list(Type), []}
+                    {erl_types:t_list(
+                       erl_types:t_subtract(
+                         Type, erl_types:t_from_term(Default))),
+                     [], false}
             end
     end.
 
@@ -1324,6 +1345,28 @@ build_ref_deps(TaggedElems) ->
                 end, Elem#elem.refs)
       end, TaggedElems),
     G.
+
+%% make_type_spec(RefTag, {_, TypesDict, RecDict}) ->
+%%     ResType = dict:fetch(RefTag, TypesDict),
+%%     FunName = make_dec_fun_name([RefTag]),
+%%     erl_syntax:text("-spec " ++ FunName ++ "(#xmlel{}) -> "
+%%                     ++ erl_types:t_to_string(ResType, RecDict) ++ ".").
+
+%% make_decoding_MFA_type_spec(FunName, Default, DecMFA, IsRequired,
+%%                             {_, _, RecTypes}) ->
+%%     DefType = erl_types:t_to_string(erl_types:t_from_term(Default), RecTypes),
+%%     OutDefType = if IsRequired ->
+%%                          erl_types:t_to_string(erl_types:t_none());
+%%                     true ->
+%%                          DefType
+%%                  end,
+%%     Indent = lists:duplicate(length(FunName) + 6, $ ),
+%%     C1 = "(" ++ DefType ++ ") -> " ++ OutDefType ++ ";" ++ io_lib:nl(),
+%%     C2 = "(binary()) -> " ++ erl_types:t_to_string(
+%%                                get_fun_return_type(DecMFA),
+%%                                RecTypes) ++ ".",
+%%     FunName1 = atom_to_string(list_to_atom(FunName)),
+%%     erl_syntax:text("-spec " ++ FunName1 ++ C1 ++ Indent ++ C2).
 
 %%====================================================================
 %% Auxiliary functions
@@ -1551,7 +1594,7 @@ prep_enc_fun({Fun, Args}, KnownFunctions)
         false ->
             case lists:member({Fun, Arity}, KnownFunctions) of
                 true ->
-                    {Fun, Arity};
+                    {Fun, Args};
                 false ->
                     bad_spec({unknown_enc_fun, {Fun, Args}})
             end
