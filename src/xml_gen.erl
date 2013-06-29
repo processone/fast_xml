@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 -module(xml_gen).
 
+-compile(export_all).
 %% Generator API
 -export([compile/1]).
 %% Runtime API
@@ -1626,55 +1627,50 @@ bad_spec(Err) ->
 %% @hidden
 %% @doc Same as file:consult, but expands known records.
 consult(Path) ->
-    case file:read_file(Path) of
-        {ok, Data} ->
-            case get_forms(binary_to_list(Data)) of
-                {ok, Forms} ->
-                    {Terms, OtherForms} =
-                        lists:foldl(
-                          fun([Form], {Trms, Other}) ->
-                                  Trm = 
-                                      erl_syntax_lib:map(
-                                        fun(T) ->
-                                                case erl_syntax:type(T) of
-                                                    record_expr ->
-                                                        record_to_tuple(T);
-                                                    _ ->
-                                                        T
-                                                end
-                                        end, erl_syntax:form_list([Form])),
-                                  {[Trm|Trms], Other};
-                             (Form, {Trms, Other}) ->
-                                          {Trms, [Form|Other]}
-                          end, {[], []}, Forms),
-                    TmpFile = filename:join([filename:dirname(Path),
-                                             filename:basename(Path) ++ "~"]),
-                    Str = lists:map(
-                            fun(Tree) ->
-                                    AbsForm = erl_syntax:revert_forms(Tree),
-                                    case catch erl_eval:exprs(AbsForm, []) of
-                                        {'EXIT', _} ->
-                                            [];
-                                        {value, Term, _} ->
-                                            [io_lib:print(Term), $., io_lib:nl()]
-                                    end
-                            end, Terms),
-                    Res = case file:write_file(TmpFile, Str) of
-                              ok ->
-                                  case file:consult(TmpFile) of
-                                      {ok, R} ->
-                                          {ok, R, OtherForms};
-                                      Err ->
-                                          Err
-                                  end;
+    case get_forms(Path) of
+        {ok, Forms} ->
+            {Terms, OtherForms} =
+                lists:foldl(
+                  fun([Form], {Trms, Other}) ->
+                          Trm = 
+                              erl_syntax_lib:map(
+                                fun(T) ->
+                                        case erl_syntax:type(T) of
+                                            record_expr ->
+                                                record_to_tuple(T);
+                                            _ ->
+                                                T
+                                        end
+                                end, erl_syntax:form_list([Form])),
+                          {[Trm|Trms], Other};
+                     (Form, {Trms, Other}) ->
+                          {Trms, [Form|Other]}
+                  end, {[], []}, Forms),
+            TmpFile = filename:join([filename:dirname(Path),
+                                     filename:basename(Path) ++ "~"]),
+            Str = lists:map(
+                    fun(Tree) ->
+                            AbsForm = erl_syntax:revert_forms(Tree),
+                            case catch erl_eval:exprs(AbsForm, []) of
+                                {'EXIT', _} ->
+                                    [];
+                                {value, Term, _} ->
+                                    [io_lib:print(Term), $., io_lib:nl()]
+                            end
+                    end, Terms),
+            Res = case file:write_file(TmpFile, Str) of
+                      ok ->
+                          case file:consult(TmpFile) of
+                              {ok, R} ->
+                                  {ok, R, OtherForms};
                               Err ->
                                   Err
-                          end,
-                    catch file:delete(TmpFile),
-                    Res;
-                Err ->
-                    Err
-            end;
+                          end;
+                      Err ->
+                          Err
+                  end,
+            catch file:delete(TmpFile),
+            Res;
         Err ->
             Err
     end.
@@ -1738,41 +1734,52 @@ record_to_tuple(R, TaggedRecord) ->
              end, TaggedRecord),
     erl_syntax:tuple([Name|Vals]).
 
-get_forms(String) ->
-    case scan(String) of
-        {ok, Terms} ->
-            lists:foldl(
-              fun(_, {error, _} = Err) ->
-                      Err;
-                 (Term, {ok, Acc}) ->
-                      case erl_parse:parse_exprs(Term) of
-                          {ok, Form} ->
-                              {ok, [Form|Acc]};
-                          _ ->
-                              case erl_parse:parse_form(Term) of
-                                  {ok, AbsForm} ->
-                                      {ok, [AbsForm|Acc]};
-                                  Err ->
-                                      Err
-                              end
-                      end
-              end, {ok, []}, lists:reverse(Terms));
+get_forms(Path) ->
+    case file:open(Path, [read]) of
+        {ok, Fd} ->
+            parse(Fd, 1, []);
         Err ->
             Err
     end.
 
-scan(String) ->
-    {ok, Tokens, _} = erl_scan:string(String),
-    case lists:foldl(
-           fun({dot, Line}, {Acc, Res}) ->
-                   {[], [lists:reverse([{dot, Line}|Acc])|Res]};
-              (Token, {Acc, Res}) ->
-                   {[Token|Acc], Res}
-           end, {[], []}, Tokens) of
-        {[], Terms} when Terms /= [] ->
-            {ok, lists:reverse(Terms)};
-        {[], []} ->
-            {error, empty};
-        {_, []} ->
-            {error, parse_error}
+parse(Fd, Line, Acc) ->
+    {ok, Pos} = file:position(Fd, cur),
+    case epp_dodger:parse_form(Fd, Line) of
+        {ok, Form, NewLine} ->
+            parse(Fd, NewLine, [Form|Acc]);
+        {eof, _} ->
+            {ok, lists:reverse(Acc)};
+        _Err ->
+            file:position(Fd, {bof, Pos}),
+            case io:scan_erl_exprs(Fd, "", Line) of
+                {ok, Toks, NewLine} ->
+                    case transform_spec_to_form(Toks) of
+                        {ok, Form} ->
+                            parse(Fd, NewLine, [Form|Acc]);
+                        not_spec ->
+                            parse(Fd, NewLine, Acc);
+                        Err ->
+                            Err
+                    end;
+                {eof, _} ->
+                    {ok, lists:reverse(Acc)};
+                Err ->
+                    Err
+            end
     end.
+
+transform_spec_to_form([{'-', L0}, {atom, _, 'xml'}, {'(', _}|T]) ->
+    case lists:reverse(T) of
+        [{dot, L3}, {')', L2}|T1] ->
+            T2 = lists:reverse([{dot, L3}, {'}', L2}|T1]),
+            case erl_parse:parse_exprs([{'{', L0}|T2]) of
+                {ok, Form} ->
+                    {ok, Form};
+                Err ->
+                    Err
+            end;
+        _ ->
+            not_spec
+    end;
+transform_spec_to_form(_) ->
+    not_spec.
