@@ -11,7 +11,7 @@
 %% Generator API
 -export([compile/1]).
 %% Runtime API
--export([reverse/3, format_error/1, get_attr/2]).
+-export([format_error/1, get_attr/2]).
 %% Runtime built-in decoders/encoders
 -export([dec_int/1, dec_int/3, dec_enum/2,
          enc_int/1, enc_enum/1, not_empty/1]).
@@ -54,19 +54,6 @@ do_compile(Path) ->
         Err ->
             Err
     end.
-
-%%====================================================================
-%% Runtime API
-%%====================================================================
--spec reverse([any()], pos_integer(), pos_integer() | infinity) -> [any()].
-
-reverse(L, Min, Max) ->
-    reverse(L, Min, Max, 0, []).
-
-reverse([H|T], Min, Max, Count, Acc) ->
-    reverse(T, Min, Max, Count+1, [H|Acc]);
-reverse([], Min, Max, Count, Acc) when Count >= Min, Count =< Max ->
-    Acc.
 
 %%====================================================================
 %% Runtime decoders/encoders
@@ -767,12 +754,8 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, Refs, Tag,
                                  [label_to_var(L1)])]);
                        ({L, [#ref{min = 0, max = infinity}|_]}) ->
                             make_function_call(
-                              lists, reverse, [label_to_var(L)]);
-                       ({L, [#ref{min = Min, max = Max}|_]}) ->
-                            make_function_call(
-                              xml_gen, reverse,
-                              [label_to_var(L), abstract(Min), abstract(Max)])
-                       end, group_refs(Refs)),
+                              lists, reverse, [label_to_var(L)])
+                    end, group_refs(Refs)),
     CDataCall = if HaveCData ->
                         [make_function_call(
                            make_dec_fun_name([cdata,Tag]), CDataVars)];
@@ -1484,14 +1467,11 @@ prepare_ref(Name, #ref{name = RefName}, _)
   when not is_atom(RefName) ->
     bad_spec({wrong_ref_name, RefName, Name});
 prepare_ref(Name, #ref{name = RefName, min = Min}, _)
-  when not (is_integer(Min) andalso Min >= 0) ->
+  when not (Min == 0 orelse Min == 1) ->
     bad_spec({wrong_ref_min, Min, RefName, Name});
 prepare_ref(Name, #ref{name = RefName, max = Max}, _)
-  when not ((is_integer(Max) andalso Max > 0) orelse (Max == infinity)) ->
+  when not (Max == 1 orelse Max == infinity) ->
     bad_spec({wrong_ref_max, Max, RefName, Name});
-prepare_ref(Name, #ref{name = RefName, min = Min, max = Max}, _)
-  when Min > Max ->
-    bad_spec({ref_min_over_max, Min, Max, RefName, Name});
 prepare_ref(Name, #ref{name = RefName, label = Label}, _)
   when not is_atom(Label) ->
     bad_spec({wrong_ref_label, Label, RefName, Name});
