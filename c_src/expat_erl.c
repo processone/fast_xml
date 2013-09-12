@@ -33,6 +33,7 @@
 
 #define PARSE_COMMAND 0
 #define PARSE_FINAL_COMMAND 1
+#define PARSING_NOT_RESUMABLE XML_FALSE
 
 /*
  * R15B changed several driver callbacks to use ErlDrvSizeT and
@@ -169,6 +170,35 @@ void *erlXML_StartNamespaceDeclHandler(expat_data *d,
   return NULL;
 }
 
+/*
+ * Prevent entity expansion attacks (CVE-2013-1664) by refusing
+ * to process any XML that contains a DTD.
+ */
+void *erlXML_StartDoctypeDeclHandler(expat_data *d,
+                                    const XML_Char *doctypeName,
+                                    const XML_Char *doctypeSysid,
+                                    const XML_Char *doctypePubid,
+                                    int hasInternalSubset)
+{
+   XML_StopParser(d->parser, PARSING_NOT_RESUMABLE);
+   return NULL;
+}
+
+/*
+ * Prevent entity expansion attacks (CVE-2013-1664) by having an explicit
+ * default handler. According to the documentation,
+ *
+ * "Setting the handler with this call has the side effect of turning off
+ *  expansion of references to internally defined general entities. Instead
+ *  these references are passed to the default handler."
+ */
+void *erlXML_DefaultHandler(expat_data *d,
+							const XML_Char *s,
+							int len)
+{
+   return NULL;
+}
+
 static ErlDrvData expat_erl_start(ErlDrvPort port, char *buff)
 {
    expat_data* d = (expat_data*)driver_alloc(sizeof(expat_data));
@@ -187,9 +217,12 @@ static ErlDrvData expat_erl_start(ErlDrvPort port, char *buff)
 
    XML_SetStartNamespaceDeclHandler(
       d->parser, (XML_StartNamespaceDeclHandler) erlXML_StartNamespaceDeclHandler);
+   XML_SetStartDoctypeDeclHandler(
+      d->parser, (XML_StartDoctypeDeclHandler) erlXML_StartDoctypeDeclHandler);
    XML_SetReturnNSTriplet(d->parser, 1);
 
-   XML_SetDefaultHandler(d->parser, NULL);
+   XML_SetDefaultHandler(
+      d->parser, (XML_DefaultHandler) erlXML_DefaultHandler);
 
    return (ErlDrvData)d;
 }
@@ -250,8 +283,11 @@ static ErlDrvSSizeT expat_erl_control(ErlDrvData drv_data,
 
 	 if(!res)
 	 {
-	    errcode = XML_GetErrorCode(d->parser);
-	    errstring = (char *)XML_ErrorString(errcode);
+		 errcode = XML_GetErrorCode(d->parser);
+		 if (errcode == XML_STATUS_SUSPENDED)
+			 errstring = (char *)"DTDs are not allowed";
+		 else
+			 errstring = (char *)XML_ErrorString(errcode);
 
 	    ei_x_encode_list_header(&event_buf, 1);
 	    ei_x_encode_tuple_header(&event_buf, 2);
