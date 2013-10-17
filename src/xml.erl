@@ -35,6 +35,7 @@
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
 	 get_tag_attr_s/2, get_subtag/2, get_subtag_cdata/2,
+         get_subtag_with_xmlns/3,
 	 append_subtags/2, get_path_s/2,
 	 replace_tag_attr/3, to_xmlel/1]).
 
@@ -386,6 +387,42 @@ get_subtag1([El | Els], Name) ->
       _ -> get_subtag1(Els, Name)
     end;
 get_subtag1([], _) -> false.
+
+%%
+-spec(get_subtag_with_xmlns/3 ::
+(
+  Xmlel :: xmlel(),
+  Name  :: binary(),
+  XMLNS :: binary())
+    -> xmlel() | false
+).
+
+get_subtag_with_xmlns(#xmlel{children = Els}, Name, XMLNS) ->
+    get_subtag_with_xmlns1(Els, Name, XMLNS).
+
+%%
+-spec(get_subtag_with_xmlns1/3 ::
+(
+  Els  :: [xmlel() | cdata()],
+  Name :: binary(),
+  XMLNS :: binary())
+    -> xmlel() | false
+).
+
+get_subtag_with_xmlns1([El | Els], Name, XMLNS) ->
+    case El of
+	#xmlel{name = Name, attrs = Attrs} ->
+            case get_attr(<<"xmlns">>, Attrs) of
+                {value, XMLNS} ->
+                    El;
+                _ ->
+                    get_subtag_with_xmlns1(Els, Name, XMLNS)
+            end;
+	_ ->
+	    get_subtag_with_xmlns1(Els, Name, XMLNS)
+    end;
+get_subtag_with_xmlns1([], _, _) ->
+    false.
 
 %%
 -spec(get_subtag_cdata/2 ::
