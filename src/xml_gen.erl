@@ -67,7 +67,7 @@ dec_int(Val) ->
     dec_int(Val, infinity, infinity).
 
 dec_int(Val, Min, Max) ->
-    case erlang:binary_to_integer(Val) of
+    case list_to_integer(binary_to_list(Val)) of
         Int when Int =< Max, Min == infinity ->
             Int;
         Int when Int =< Max, Int >= Min ->
@@ -77,7 +77,7 @@ dec_int(Val, Min, Max) ->
 -spec enc_int(integer()) -> binary().
 
 enc_int(Int) ->
-    erlang:integer_to_binary(Int).
+    list_to_binary(integer_to_list(Int)).
 
 -spec dec_enum(binary(), [atom()]) -> atom().
 
