@@ -80,7 +80,7 @@ static void buf_add_str(ErlNifEnv* env, struct buf *rbuf, char *data, int len)
   rbuf->len += len;
 }
 
-inline void crypt(ErlNifEnv* env, struct buf *rbuf, unsigned char *data, int len)
+static void xml_encode(ErlNifEnv* env, struct buf *rbuf, unsigned char *data, int len)
 {
   int i;
 
@@ -140,7 +140,7 @@ static int make_attrs(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM attrs)
 	  buf_add_char(env, rbuf, ' ');
 	  buf_add_str(env, rbuf, (char *)name.data, name.size);
 	  buf_add_str(env, rbuf, "='", 2);
-	  crypt(env, rbuf, data.data, data.size);
+	  xml_encode(env, rbuf, data.data, data.size);
 	  buf_add_char(env, rbuf, '\'');
 	  attrs = tail;
 	} else {
@@ -170,7 +170,7 @@ static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el)
     if (arity == 2) {
       if (!ENIF_COMPARE(tuple[0], atom_xmlcdata)) {
 	if (enif_inspect_iolist_as_binary(env, tuple[1], &cdata)) {
-	  crypt(env, rbuf, cdata.data, cdata.size);
+	  xml_encode(env, rbuf, cdata.data, cdata.size);
 	  ret = 1;
 	};
       };
