@@ -233,7 +233,7 @@ make_aux_funs() ->
 
 make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
     {Strings, _} =
-        lists:foldr(
+        lists:foldl(
           fun(Tag, {Res, Seen}) ->
                   RefElem = get_elem_by_ref(Tag, TaggedElems),
                   Result = RefElem#elem.result,
@@ -252,7 +252,7 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
                           {Res, Seen}
                   end
           end, {[], []}, Tags),
-    Strings.
+    lists:reverse(Strings).
 
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
