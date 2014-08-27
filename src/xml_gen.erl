@@ -170,6 +170,7 @@ compile(TaggedElems, Forms, Path, Opts) ->
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
         Printer ++ Forms ++ AST,
     Records = make_records(Types, TaggedElems),
+    TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
                 [erl_syntax:list(
@@ -206,6 +207,9 @@ compile(TaggedElems, Forms, Path, Opts) ->
               [erl_prettypr:format(Hdr),
                io_lib:nl(),
                string:join(Records, io_lib:nl() ++ io_lib:nl()),
+	       io_lib:nl(),
+	       io_lib:nl(),
+	       TypeSpecs,
                io_lib:nl()]);
         Err ->
             Err
@@ -253,6 +257,14 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
                   end
           end, {[], []}, Tags),
     lists:reverse(Strings).
+
+make_typespecs(ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
+    TypeName = proplists:get_value(type_name, Opts, ModName ++ "_type"),
+    Records = [[$#, atom_to_string(R), "{}"]
+	       || {record, R} <- dict:fetch_keys(RecDict)],
+    Prefix = "-type " ++ TypeName ++ "() :: ",
+    Sep = " |" ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
+    [Prefix, string:join(Records, Sep), $.].
 
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
