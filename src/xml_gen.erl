@@ -462,10 +462,13 @@ make_top_encoders(TaggedSpecs, Opts) ->
 			  {RecAcc, ResAcc}
 		  end
 	  end, {dict:new(), dict:new()}, TaggedSpecs),
-    Clauses =
-        lists:flatmap(
+    NilNSClause = erl_syntax:clause(
+		    [erl_syntax:underscore()], none, [abstract(<<"">>)]),
+    {EncClauses, NSClauses, _} =
+        lists:foldl(
           fun({Tag, #elem{name = Name, xmlns = XMLNS,
-			  result = Result, attrs = Attrs}}) ->
+			  result = Result, attrs = Attrs}},
+	      {EncAcc, NSAcc, Seen}) ->
                   NewResult = labels_to_underscores(Result),
                   Var = label_to_var(prepare_label(undefined, Name)),
 		  HasXMLNSAttr = lists:any(
@@ -479,8 +482,10 @@ make_top_encoders(TaggedSpecs, Opts) ->
                       Tags = dict:fetch(H, RecNames),
 		      OtherResults = dict:fetch(H, ResNames) -- [Result],
 		      true = lists:member(Tag, Tags),
-		      false = lists:member(Result, OtherResults),
-                      XMLNSAttrs = if IgnoreXMLNS or HasXMLNSAttr or is_list(XMLNS) ->
+		      IsDuplicated = lists:member(Result, OtherResults),
+		      AlreadySeen = lists:member(Result, Seen),
+                      XMLNSAttrs = if IgnoreXMLNS or HasXMLNSAttr
+				      or is_list(XMLNS) or IsDuplicated ->
                                            erl_syntax:list([]);
                                       true ->
                                            erl_syntax:list(
@@ -488,16 +493,28 @@ make_top_encoders(TaggedSpecs, Opts) ->
                                                 [abstract(<<"xmlns">>),
                                                  abstract(XMLNS)])])
                                    end,
-                      [erl_syntax:clause(
-                         [erl_syntax:match_expr(NewResult, Var)],
-                         none,
-                         [make_function_call(
-                            make_enc_fun_name([Tag]),
-                            [Var, XMLNSAttrs])])]
+                      {if AlreadySeen ->
+			       EncAcc;
+			  true ->
+			       [erl_syntax:clause(
+				  [erl_syntax:match_expr(NewResult, Var)],
+				  none,
+				  [make_function_call(
+				     make_enc_fun_name([Tag]),
+				     [Var, XMLNSAttrs])])|EncAcc]
+		       end,
+		       if IgnoreXMLNS or is_list(XMLNS) or IsDuplicated ->
+			       NSAcc;
+			  true ->
+			       [erl_syntax:clause(
+				  [NewResult], none,
+				  [abstract(XMLNS)])|NSAcc]
+		       end,
+		       [Result|Seen]}
                   catch _:_ ->
-                          []
+                          {EncAcc, NSAcc, Seen}
                   end
-          end, lists:reverse(TaggedSpecs)),
+          end, {[], [NilNSClause], []}, TaggedSpecs),
     XmlElClause = erl_syntax:clause(
 		    [erl_syntax:match_expr(
 		       erl_syntax:tuple(
@@ -508,7 +525,8 @@ make_top_encoders(TaggedSpecs, Opts) ->
 		       erl_syntax:variable("El"))],
 		    none,
 		    [erl_syntax:variable("El")]),
-    [erl_syntax:function(erl_syntax:atom("encode"), [XmlElClause|Clauses])].
+    [erl_syntax:function(erl_syntax:atom("encode"), [XmlElClause|EncClauses]),
+     erl_syntax:function(erl_syntax:atom("get_ns"), NSClauses)].
 
 make_printer(TaggedSpecs) ->
     PassClause = erl_syntax:clause(
