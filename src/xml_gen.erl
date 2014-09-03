@@ -1321,6 +1321,9 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                   Tag, AllElems) ->
     CDataLabel = CData#cdata.label,
     HaveCData = have_label(Result, CDataLabel),
+    HaveRefs = Refs /= [],
+    HaveXMLs = have_label(Result, '$_xmls'),
+    HaveEls = have_label(Result, '$_els'),
     SubElGenerator = case have_label(Result, '$_els') of
                          true ->
                              erl_syntax:list_comp(
@@ -1347,20 +1350,38 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                          {false, false} ->
                              erl_syntax:list([])
                      end,
-    CDataAcc = if HaveCData ->
-                       make_function_call(make_enc_fun_name([cdata,Tag]),
-                                          [label_to_var(CDataLabel),
-                                           XmlElGenerator]);
+    RefsFun = lists:foldr(
+		fun({Label, _}, Acc) ->
+			Var = label_to_var(Label),
+			make_function_call(
+			  make_enc_fun_name([Label,Tag]),
+			  [Var, Acc])
+		end, erl_syntax:list([]), group_refs(Refs)),
+    CDataFun = if HaveRefs and HaveCData ->
+		       make_function_call(
+			 lists, reverse,
+			 [make_function_call(make_enc_fun_name([cdata,Tag]),
+					     [label_to_var(CDataLabel),
+					      RefsFun])]);
+		  HaveRefs and not HaveCData ->
+		       make_function_call(lists, reverse, [RefsFun]);
+		  HaveCData and not HaveRefs ->
+		       make_function_call(make_enc_fun_name([cdata,Tag]),
+					     [label_to_var(CDataLabel),
+					      erl_syntax:list([])]);
                   true ->
-                       XmlElGenerator
+		       erl_syntax:list([])
                end,
-    ElFun = lists:foldl(
-              fun({Label, _}, Acc) ->
-                      Var = label_to_var(Label),
-                      make_function_call(
-                        make_enc_fun_name([Label,Tag]),
-                        [Var, Acc])
-              end, CDataAcc, group_refs(Refs)),
+    ResFun = if (HaveCData or HaveRefs) and (HaveXMLs or HaveEls) ->
+		     erl_syntax:infix_expr(
+		       XmlElGenerator, erl_syntax:operator("++"), CDataFun);
+		HaveCData or HaveRefs ->
+		     CDataFun;
+		HaveXMLs or HaveEls ->
+		     XmlElGenerator;
+		true ->
+		     erl_syntax:list([])
+	     end,
     AttrFun = lists:foldl(
                 fun(#attr{name = AttrName, label = AttrLabel}, Acc) ->
                         Var = label_to_var(prepare_label(AttrLabel, AttrName)),
@@ -1373,7 +1394,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
        [erl_syntax:clause(
           [subst_labels(Result), erl_syntax:variable("_xmlns_attrs")],
           none,
-          [erl_syntax:match_expr(erl_syntax:variable("_els"), ElFun),
+          [erl_syntax:match_expr(erl_syntax:variable("_els"), ResFun),
            erl_syntax:match_expr(erl_syntax:variable("_attrs"),AttrFun),
            erl_syntax:tuple(
              [erl_syntax:atom("xmlel"),
