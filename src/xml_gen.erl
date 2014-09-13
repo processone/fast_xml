@@ -177,7 +177,8 @@ compile(TaggedElems, Forms, Path, Opts) ->
 		      end, lists:reverse(AttrForms)),
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
         Printer ++ FunForms ++ AST,
-    Records = make_records(Types, TaggedElems),
+    PredefRecords = get_predefined_records(AttrForms),
+    Records = make_records(Types, TaggedElems, PredefRecords, Opts),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
                 erl_syntax:atom("export"),
@@ -224,6 +225,18 @@ compile(TaggedElems, Forms, Path, Opts) ->
             Err
     end.
 
+get_predefined_records(AttrForms) ->
+    lists:foldl(
+      fun(F, Acc) ->
+	      case erl_syntax_lib:analyze_attribute(F) of
+		  {record, {RecName, RecAttrs}} ->
+		      Fields = [Field || {Field, _} <- RecAttrs],
+		      dict:store(RecName, Fields, Acc);
+		  _ ->
+		      Acc
+	      end
+      end, dict:new(), AttrForms).
+
 make_aux_funs() ->
     case get_abstract_code_from_myself() of
         {ok, AbsCode} ->
@@ -244,7 +257,7 @@ make_aux_funs() ->
             erlang:error({no_abstract_code_found, ?MODULE})
     end.
 
-make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
+make_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, Opts) ->
     {Strings, _} =
         lists:foldl(
           fun(Tag, {Res, Seen}) ->
@@ -253,36 +266,47 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
                   case term_is_record(Result) of
                       true ->
                           RecName = element(1, Result),
-                          case lists:member(RecName, Seen) of
-                              false ->
-                                  {[record_to_string(RefElem, RecDict,
-                                                     TypesDict)|Res],
-                                   [RecName|Seen]};
-                              true ->
-                                  {Res, Seen}
-                          end;
+			  case dict:is_key(RecName, PredefRecords) of
+			      true ->
+				  {Res, Seen};
+			      false ->
+				  case lists:member(RecName, Seen) of
+				      false ->
+					  {[record_to_string(
+					      RefElem, RecDict,
+					      TypesDict, Opts)|Res],
+					   [RecName|Seen]};
+				      true ->
+					  {Res, Seen}
+				  end
+			  end;
                       false ->
                           {Res, Seen}
                   end
           end, {[], []}, Tags),
     lists:reverse(Strings).
 
-make_typespecs(ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
-    TypeName = proplists:get_value(type_name, Opts, ModName ++ "_type"),
-    case [[$#, atom_to_string(R), "{}"]
-	  || {record, R} <- dict:fetch_keys(RecDict)] of
-	[] ->
-	    [];
-	Records ->
-	    Prefix = "-type " ++ TypeName ++ "() :: ",
-	    Sep = " |" ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
-	    [Prefix, string:join(Records, Sep), $.]
+make_typespecs(_ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
+    case proplists:get_value(add_type_specs, Opts) of
+	TypeName when is_atom(TypeName), TypeName /= undefined ->
+	    case [[atom_to_string(R), "()"]
+		  || {record, R} <- dict:fetch_keys(RecDict)] of
+		[] ->
+		    [];
+		Records ->
+		    Prefix = "-type " ++ atom_to_string(TypeName) ++ "() :: ",
+		    Sep = " |" ++ io_lib:nl()
+			++ lists:duplicate(length(Prefix), $ ),
+		    [Prefix, string:join(Records, Sep), $.]
+	    end;
+	_ ->
+	    []
     end.
 
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
 
-record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes) ->
+record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, Opts) ->
     [RecName|RecLabels] = tuple_to_list(Result),
     Prefix = "-record(" ++ atom_to_string(RecName) ++ ", {",
     Sep = "," ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
@@ -305,7 +329,15 @@ record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes) ->
                             erl_types:t_to_string(Type, RecDict)]
                    end
            end, RecLabels),
-    [Prefix, string:join(Fs, Sep), "})."].
+    RecordStr = [Prefix, string:join(Fs, Sep), "})."],
+    case proplists:get_value(add_type_specs, Opts) of
+	TypeName when is_atom(TypeName), TypeName /= undefined ->
+	    [RecordStr, io_lib:nl(),
+	     "-type ", atom_to_string(RecName), "() :: ",
+	     "#", atom_to_string(RecName), "{}."];
+	_ ->
+	    RecordStr
+    end.
 
 header(FileName) ->
     erl_syntax:comment(
@@ -1673,8 +1705,7 @@ term_is_record(Term) ->
     try
         [H|T]= tuple_to_list(Term),
         true = is_atom(H),
-        false = is_label(H),
-        lists:all(fun is_label/1, T)
+        false == is_label(H)
     catch _:_ ->
             false
     end.
