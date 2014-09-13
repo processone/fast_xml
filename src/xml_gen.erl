@@ -165,7 +165,6 @@ compile(TaggedElems, Forms, Path, Opts) ->
                [erl_syntax:atom(list_to_atom(ModName))]),
     Decoders = make_top_decoders(TaggedElems, ModName, Opts),
     Encoders = make_top_encoders(TaggedElems, Opts),
-    Printer = make_printer(TaggedElems),
     AuxFuns = make_aux_funs(),
     {AttrForms, FunForms} = lists:partition(
 			      fun(Form) ->
@@ -175,9 +174,10 @@ compile(TaggedElems, Forms, Path, Opts) ->
 		      fun(Form) ->
 			      erl_syntax:get_ann(Form)
 		      end, lists:reverse(AttrForms)),
+    PredefRecords = get_predefined_records(AttrForms),
+    Printer = make_printer(TaggedElems, PredefRecords),
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
         Printer ++ FunForms ++ AST,
-    PredefRecords = get_predefined_records(AttrForms),
     Records = make_records(Types, TaggedElems, PredefRecords, Opts),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
@@ -573,7 +573,7 @@ make_top_encoders(TaggedSpecs, Opts) ->
     [erl_syntax:function(erl_syntax:atom("encode"), [XmlElClause|EncClauses]),
      erl_syntax:function(erl_syntax:atom("get_ns"), NSClauses)].
 
-make_printer(TaggedSpecs) ->
+make_printer(TaggedSpecs, PredefRecords) ->
     PassClause = erl_syntax:clause(
                    [erl_syntax:underscore(),
                     erl_syntax:underscore()],
@@ -599,13 +599,17 @@ make_printer(TaggedSpecs) ->
                       true = is_atom(H),
                       false = is_label(H),
                       [Tag|_] = dict:fetch(H, RecNames),
-                      true = lists:all(fun is_label/1, T),
+		      Fields = case dict:find(H, PredefRecords) of
+				   {ok, Fs} ->
+				       Fs;
+				   error ->
+				       [label_to_record_field(F) || F <- T]
+			       end,
                       [erl_syntax:clause(
                          [erl_syntax:atom(H), abstract(length(T))],
                          none,
                          [erl_syntax:list(
-                            [erl_syntax:atom(
-                               label_to_record_field(F)) || F <- T])])
+                            [erl_syntax:atom(F) || F <- Fields])])
                        |Acc]
                   catch _:_ ->
                           Acc
