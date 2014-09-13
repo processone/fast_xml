@@ -167,8 +167,16 @@ compile(TaggedElems, Forms, Path, Opts) ->
     Encoders = make_top_encoders(TaggedElems, Opts),
     Printer = make_printer(TaggedElems),
     AuxFuns = make_aux_funs(),
+    {AttrForms, FunForms} = lists:partition(
+			      fun(Form) ->
+				      erl_syntax:type(Form) == attribute
+			      end, Forms),
+    RawAttributes = lists:flatmap(
+		      fun(Form) ->
+			      erl_syntax:get_ann(Form)
+		      end, lists:reverse(AttrForms)),
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
-        Printer ++ Forms ++ AST,
+        Printer ++ FunForms ++ AST,
     Records = make_records(Types, TaggedElems),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
@@ -205,7 +213,8 @@ compile(TaggedElems, Forms, Path, Opts) ->
             file:write_file(
               filename:join([DirName, ModName ++ ".hrl"]),
               [erl_prettypr:format(Hdr),
-               io_lib:nl(),
+	       RawAttributes,
+	       io_lib:nl(),
                string:join(Records, io_lib:nl() ++ io_lib:nl()),
 	       io_lib:nl(),
 	       io_lib:nl(),
@@ -2211,7 +2220,16 @@ parse(Fd, Line, Acc) ->
     {ok, Pos} = file:position(Fd, cur),
     case epp_dodger:parse_form(Fd, Line) of
         {ok, Form, NewLine} ->
-            parse(Fd, NewLine, [Form|Acc]);
+	    case erl_syntax:type(Form) of
+		attribute ->
+		    {ok, NewPos} = file:position(Fd, cur),
+		    {ok, RawForm} = file:pread(Fd, Pos, NewPos - Pos),
+		    file:position(Fd, {bof, NewPos}),
+		    AnnForm = erl_syntax:set_ann(Form, RawForm),
+		    parse(Fd, NewLine, [AnnForm|Acc]);
+		_ ->
+		    parse(Fd, NewLine, [Form|Acc])
+	    end;
         {eof, _} ->
             {ok, lists:reverse(Acc)};
         _Err ->
