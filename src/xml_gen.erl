@@ -269,11 +269,15 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems) ->
 
 make_typespecs(ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
     TypeName = proplists:get_value(type_name, Opts, ModName ++ "_type"),
-    Records = [[$#, atom_to_string(R), "{}"]
-	       || {record, R} <- dict:fetch_keys(RecDict)],
-    Prefix = "-type " ++ TypeName ++ "() :: ",
-    Sep = " |" ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
-    [Prefix, string:join(Records, Sep), $.].
+    case [[$#, atom_to_string(R), "{}"]
+	  || {record, R} <- dict:fetch_keys(RecDict)] of
+	[] ->
+	    [];
+	Records ->
+	    Prefix = "-type " ++ TypeName ++ "() :: ",
+	    Sep = " |" ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
+	    [Prefix, string:join(Records, Sep), $.]
+    end.
 
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
