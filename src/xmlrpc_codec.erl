@@ -799,7 +799,7 @@ encode_fault({fault, Value}, _xmlns_attrs) ->
 decode_methodResponse(__TopXMLNS, __IgnoreEls,
 		      {xmlel, <<"methodResponse">>, _attrs, _els}) ->
     Payload = decode_methodResponse_els(__TopXMLNS,
-					__IgnoreEls, _els, undefined),
+					__IgnoreEls, _els, []),
     {response, Payload}.
 
 decode_methodResponse_els(__TopXMLNS, __IgnoreEls, [],
@@ -826,8 +826,7 @@ encode_methodResponse({response, Payload},
     _attrs = _xmlns_attrs,
     {xmlel, <<"methodResponse">>, _attrs, _els}.
 
-'encode_methodResponse_$payload'(undefined, _acc) ->
-    _acc;
+'encode_methodResponse_$payload'([], _acc) -> _acc;
 'encode_methodResponse_$payload'({fault, _} = Payload,
 				 _acc) ->
     [encode_fault(Payload, []) | _acc];

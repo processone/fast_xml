@@ -13,8 +13,10 @@
      #elem{name = <<"methodResponse">>,
 	   xmlns = <<"xmlrpc">>,
 	   result = {response, '$payload'},
-	   refs = [#ref{name = fault, label = '$payload', min = 0, max = 1},
-		   #ref{name = params, label = '$payload', min = 0, max = 1}]}).
+	   refs = [#ref{name = fault, label = '$payload', default = [],
+			min = 0, max = 1},
+		   #ref{name = params, label = '$payload', default = [],
+			min = 0, max = 1}]}).
 
 -xml(fault,
      #elem{name = <<"fault">>,
