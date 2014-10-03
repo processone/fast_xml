@@ -17,14 +17,14 @@
 decode(El) ->
     try xmlrpc_codec:decode(El) of
 	{call, Name, Params} ->
-	    {call, Name, [decode_param(Param) || Param <- Params]};
+	    {ok, {call, Name, [decode_param(Param) || Param <- Params]}};
 	{response, Params} when is_list(Params) ->
-	    {response, [decode_param(Param) || Param <- Params]};
+	    {ok, {response, [decode_param(Param) || Param <- Params]}};
 	{response, {fault, {struct, Struct}}} ->
 	    case {proplists:get_value(faultCode, Struct),
 		  proplists:get_value(faultString, Struct)} of
 		{{Tag, Code}, {string, String}} when Tag == int; Tag == i4 ->
-		    {response, {fault, Code, String}};
+		    {ok, {response, {fault, Code, String}}};
 		R ->
 		    {error, {bad_struct, Struct, R}}
 	    end;
@@ -104,7 +104,7 @@ fault_test() ->
 		       [{xmlel,<<"string">>,[],
 			 [{xmlcdata,<<"Too many parameters.">>}]}]}]}]}]}]}]},
     Result = {response, {fault, 4, <<"Too many parameters.">>}},
-    ?assertEqual(Result, ?MODULE:decode(Fault)),
+    ?assertEqual({ok, Result}, ?MODULE:decode(Fault)),
     ?assertEqual(Fault, ?MODULE:encode(Result)).
 
 call_test() ->
@@ -167,7 +167,7 @@ call_test() ->
 	       <<"Hello world!">>,nil,
 	       {array,[1404,<<"Something here">>,1]},
 	       {struct,[{foo,1},{bar,2}]}]},
-    ?assertEqual(Result, ?MODULE:decode(Call)),
+    ?assertEqual({ok, Result}, ?MODULE:decode(Call)),
     ?assertEqual(Call, ?MODULE:encode(Result)).
 
 response_test() ->
@@ -178,7 +178,7 @@ response_test() ->
 		      [{xmlel,<<"string">>,[],
 			[{xmlcdata,<<"South Dakota">>}]}]}]}]}]},
     Result = {response,[<<"South Dakota">>]},
-    ?assertEqual(Result, ?MODULE:decode(Response)),
+    ?assertEqual({ok, Result}, ?MODULE:decode(Response)),
     ?assertEqual(Response, ?MODULE:encode(Result)).
 
 -endif.
