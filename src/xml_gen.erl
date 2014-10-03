@@ -857,7 +857,8 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 				     erl_syntax:variable("__TopXMLNS"))])
 			end,
 	      ElemVars = lists:map(
-			   fun({Labl, _}) when Labl == Label, IgnoreXMLNS ->
+			   fun({Labl, [#ref{max = 1}|_]})
+				 when Labl == Label, IgnoreXMLNS ->
 				   erl_syntax:underscore();
 			      ({Labl, _}) ->
 				   label_to_var(Labl)
@@ -1626,6 +1627,8 @@ replace_invalid_chars([$-|T]) ->
     [$_|replace_invalid_chars(T)];
 replace_invalid_chars([$:|T]) ->
     [$_|replace_invalid_chars(T)];
+replace_invalid_chars([$.|T]) ->
+    [$_|replace_invalid_chars(T)];
 replace_invalid_chars([H|T]) ->
     [H|replace_invalid_chars(T)];
 replace_invalid_chars([]) ->
@@ -1811,9 +1814,12 @@ get_label_type(Label, Elem, Dict) ->
         #cdata{dec = DecFun, default = Default, required = IsRequired} ->
             {get_fun_return_type(DecFun), Default, IsRequired};
         [#ref{min = Min, max = Max, default = Default}|_] = Refs ->
-            Types = lists:map(
+            Types = lists:flatmap(
                       fun(#ref{name = RefTag}) ->
-                              dict:fetch(RefTag, Dict)
+                              case dict:find(RefTag, Dict) of
+				  {ok, T} -> [T];
+				  error -> []
+			      end
                       end, Refs),
             Type = erl_types:t_sup(Types),
             IsRequired = (Min == 1) and (Max == 1),
