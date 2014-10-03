@@ -6,4 +6,7 @@ src:
 clean:
 	rebar clean
 
-.PHONY: clean src
+test:
+	rebar eunit
+
+.PHONY: clean src test
