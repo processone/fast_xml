@@ -11,9 +11,23 @@
 %% API
 -export([decode/1, encode/1]).
 
+-include("xml.hrl").
+
+-type value() :: number() | binary() | boolean() | nil |
+		 {base64, binary()} |
+		 {date, binary()} |
+		 {array, [{atom(), value()}]} |
+		 {struct, [value()]}.
+
+-type fault() :: {fault, integer(), binary()}.
+-type call() :: {call, atom(), [value()]}.
+-type response() :: {response, [value()] | fault()}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+-spec decode(xmlel()) -> {ok, call()} | {ok, response()} | {error, any()}.
+
 decode(El) ->
     try xmlrpc_codec:decode(El) of
 	{call, Name, Params} ->
@@ -41,6 +55,8 @@ decode(El) ->
     catch error:{xmlrpc_codec, Reason} ->
 	    {error, Reason}
     end.
+
+-spec encode(call() | response()) -> xmlel().
 
 encode({call, Name, Params}) ->
     xmlrpc_codec:encode({call, Name, [encode_param(Param) || Param <- Params]});
