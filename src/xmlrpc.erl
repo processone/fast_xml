@@ -20,13 +20,21 @@ decode(El) ->
 	    {ok, {call, Name, [decode_param(Param) || Param <- Params]}};
 	{response, Params} when is_list(Params) ->
 	    {ok, {response, [decode_param(Param) || Param <- Params]}};
-	{response, {fault, {struct, Struct}}} ->
-	    case {proplists:get_value(faultCode, Struct),
-		  proplists:get_value(faultString, Struct)} of
-		{{Tag, Code}, {string, String}} when Tag == int; Tag == i4 ->
-		    {ok, {response, {fault, Code, String}}};
-		R ->
-		    {error, {bad_struct, Struct, R}}
+	{response, {fault, {{struct, Struct}, _}}} ->
+	    case proplists:get_value(faultCode, Struct) of
+		{{Tag, Code}, _} when Tag == int; Tag == i4 ->
+		    case  proplists:get_value(faultString, Struct) of
+			{{string, String}, _} ->
+			    {ok, {response, {fault, Code, String}}};
+			{undefined, undefined} ->
+			    {ok, {response, {fault, Code, <<"">>}}};
+			{undefined, String} when is_binary(String) ->
+			    {ok, {response, {fault, Code, String}}};
+			_ ->
+			    {error, {bad_struct, Struct}}
+		    end;
+		_ ->
+		    {error, {bad_struct, Struct}}
 	    end;
 	Other ->
 	    {error, {unexpected_element, Other}}
@@ -40,51 +48,56 @@ encode({response, Params}) when is_list(Params) ->
     xmlrpc_codec:encode({response, [encode_param(Param) || Param <- Params]});
 encode({response, {fault, Code, String}}) ->
     xmlrpc_codec:encode(
-      {response, {fault, {struct, [{faultCode, {int, Code}},
-				   {faultString, {string, String}}]}}}).
+      {response, {fault, {{struct, [{faultCode, {{int, Code}, undefined}},
+				    {faultString, {{string, String}, undefined}}]},
+			  undefined}}}).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-decode_param({int, Int}) ->
+decode_param({undefined, B}) when is_binary(B) ->
+    B;
+decode_param({undefined, undefined}) ->
+    <<"">>;
+decode_param({{int, Int}, _}) ->
     Int;
-decode_param({i4, Int}) ->
+decode_param({{i4, Int}, _}) ->
     Int;
-decode_param({boolean, Bool}) ->
+decode_param({{boolean, Bool}, _}) ->
     Bool;
-decode_param({string, S}) ->
+decode_param({{string, S}, _}) ->
     S;
-decode_param({double, D}) ->
+decode_param({{double, D}, _}) ->
     D;
-decode_param({array, L}) ->
+decode_param({{array, L}, _}) ->
     {array, [decode_param(E) || E <- L]};
-decode_param({struct, S}) ->
+decode_param({{struct, S}, _}) ->
     {struct, [{Name, decode_param(Value)} || {Name, Value} <- S]};
-decode_param({base64, B64}) ->
+decode_param({{base64, B64}, _}) ->
     {base64, B64};
-decode_param({date, Date}) ->
+decode_param({{date, Date}, _}) ->
     {date, Date};
-decode_param(nil) ->
+decode_param({nil, _}) ->
     nil.
 
 encode_param(Int) when is_integer(Int) ->
-    {int, Int};
+    {{int, Int}, undefined};
 encode_param(B) when is_boolean(B) ->
-    {boolean, B};
+    {{boolean, B}, undefined};
 encode_param(S) when is_binary(S) ->
-    {string, S};
+    {{string, S}, undefined};
 encode_param(D) when is_float(D) ->
-    {double, D};
+    {{double, D}, undefined};
 encode_param({array, L}) ->
-    {array, [encode_param(E) || E <- L]};
+    {{array, [encode_param(E) || E <- L]}, undefined};
 encode_param({struct, S}) ->
-    {struct, [{Name, encode_param(Value)} || {Name, Value} <- S]};
+    {{struct, [{Name, encode_param(Value)} || {Name, Value} <- S]}, undefined};
 encode_param({base64, B64}) ->
-    {base64, B64};
+    {{base64, B64}, undefined};
 encode_param({date, Date}) ->
-    {date, Date};
+    {{date, Date}, undefined};
 encode_param(nil) ->
-    nil.
+    {nil, undefined}.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

@@ -310,10 +310,7 @@ decode_data_els(__TopXMLNS, __IgnoreEls, [], V) ->
 decode_data_els(__TopXMLNS, __IgnoreEls,
 		[{xmlel, <<"value">>, _attrs, _} = _el | _els], V) ->
     decode_data_els(__TopXMLNS, __IgnoreEls, _els,
-		    case decode_value(__TopXMLNS, __IgnoreEls, _el) of
-		      undefined -> V;
-		      _new_el -> [_new_el | V]
-		    end);
+		    [decode_value(__TopXMLNS, __IgnoreEls, _el) | V]);
 decode_data_els(__TopXMLNS, __IgnoreEls, [_ | _els],
 		V) ->
     decode_data_els(__TopXMLNS, __IgnoreEls, _els, V).
@@ -589,60 +586,76 @@ encode_i4_cdata(_val, _acc) ->
 
 decode_value(__TopXMLNS, __IgnoreEls,
 	     {xmlel, <<"value">>, _attrs, _els}) ->
-    Val = decode_value_els(__TopXMLNS, __IgnoreEls, _els,
-			   undefined),
-    Val.
+    {Cdata, Val} = decode_value_els(__TopXMLNS, __IgnoreEls,
+				    _els, <<>>, undefined),
+    {Val, Cdata}.
 
-decode_value_els(__TopXMLNS, __IgnoreEls, [], Val) ->
-    Val;
+decode_value_els(__TopXMLNS, __IgnoreEls, [], Cdata,
+		 Val) ->
+    {decode_value_cdata(__TopXMLNS, Cdata), Val};
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"i4">>, _attrs, _} = _el | _els], _) ->
+		 [{xmlcdata, _data} | _els], Cdata, Val) ->
     decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		     <<Cdata/binary, _data/binary>>, Val);
+decode_value_els(__TopXMLNS, __IgnoreEls,
+		 [{xmlel, <<"i4">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_i4(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"int">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"int">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_int(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"string">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"string">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_string(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"double">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"double">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_double(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"base64">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"base64">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_base64(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"boolean">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"boolean">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_boolean(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"array">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"array">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_array(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"nil">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"nil">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_nil(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
-		 [{xmlel, <<"struct">>, _attrs, _} = _el | _els], _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 [{xmlel, <<"struct">>, _attrs, _} = _el | _els], Cdata,
+		 _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_struct(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls,
 		 [{xmlel, <<"dateTime.iso8601">>, _attrs, _} = _el
 		  | _els],
-		 _) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els,
+		 Cdata, _) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
 		     decode_dateTime(__TopXMLNS, __IgnoreEls, _el));
 decode_value_els(__TopXMLNS, __IgnoreEls, [_ | _els],
-		 Val) ->
-    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Val).
+		 Cdata, Val) ->
+    decode_value_els(__TopXMLNS, __IgnoreEls, _els, Cdata,
+		     Val).
 
-encode_value(Val, _xmlns_attrs) ->
-    _els = lists:reverse('encode_value_$val'(Val, [])),
+encode_value({Val, Cdata}, _xmlns_attrs) ->
+    _els = lists:reverse(encode_value_cdata(Cdata,
+					    'encode_value_$val'(Val, []))),
     _attrs = _xmlns_attrs,
     {xmlel, <<"value">>, _attrs, _els}.
 
@@ -667,6 +680,13 @@ encode_value(Val, _xmlns_attrs) ->
     [encode_struct(Val, []) | _acc];
 'encode_value_$val'({date, _} = Val, _acc) ->
     [encode_dateTime(Val, []) | _acc].
+
+decode_value_cdata(__TopXMLNS, <<>>) -> undefined;
+decode_value_cdata(__TopXMLNS, _val) -> _val.
+
+encode_value_cdata(undefined, _acc) -> _acc;
+encode_value_cdata(_val, _acc) ->
+    [{xmlcdata, _val} | _acc].
 
 decode_param(__TopXMLNS, __IgnoreEls,
 	     {xmlel, <<"param">>, _attrs, _els}) ->
@@ -710,10 +730,7 @@ decode_params_els(__TopXMLNS, __IgnoreEls,
 		  [{xmlel, <<"param">>, _attrs, _} = _el | _els],
 		  Params) ->
     decode_params_els(__TopXMLNS, __IgnoreEls, _els,
-		      case decode_param(__TopXMLNS, __IgnoreEls, _el) of
-			undefined -> Params;
-			_new_el -> [_new_el | Params]
-		      end);
+		      [decode_param(__TopXMLNS, __IgnoreEls, _el) | Params]);
 decode_params_els(__TopXMLNS, __IgnoreEls, [_ | _els],
 		  Params) ->
     decode_params_els(__TopXMLNS, __IgnoreEls, _els,

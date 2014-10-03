@@ -48,7 +48,7 @@
 -xml(value,
      #elem{name = <<"value">>,
 	   xmlns = <<"xmlrpc">>,
-	   result = '$val',
+	   result = {'$val', '$cdata'},
 	   refs = [#ref{name = i4, label = '$val', min = 0, max = 1},
 		   #ref{name = int, label = '$val', min = 0, max = 1},
 		   #ref{name = string, label = '$val', min = 0, max = 1},
