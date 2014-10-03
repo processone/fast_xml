@@ -7,6 +7,7 @@
 			min = 1, max = 1},
 		   #ref{name = params,
 			label = '$params',
+			default = [],
 			min = 0, max = 1}]}).
 
 -xml(methodResponse,

@@ -853,7 +853,7 @@ encode_methodResponse({response, Payload},
 decode_methodCall(__TopXMLNS, __IgnoreEls,
 		  {xmlel, <<"methodCall">>, _attrs, _els}) ->
     {Params, Name} = decode_methodCall_els(__TopXMLNS,
-					   __IgnoreEls, _els, undefined, error),
+					   __IgnoreEls, _els, [], error),
     {call, Name, Params}.
 
 decode_methodCall_els(__TopXMLNS, __IgnoreEls, [],
@@ -889,7 +889,7 @@ encode_methodCall({call, Name, Params}, _xmlns_attrs) ->
     _attrs = _xmlns_attrs,
     {xmlel, <<"methodCall">>, _attrs, _els}.
 
-'encode_methodCall_$params'(undefined, _acc) -> _acc;
+'encode_methodCall_$params'([], _acc) -> _acc;
 'encode_methodCall_$params'(Params, _acc) ->
     [encode_params(Params, []) | _acc].
 

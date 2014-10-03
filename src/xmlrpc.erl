@@ -194,4 +194,18 @@ response_test() ->
     ?assertEqual({ok, Result}, ?MODULE:decode(Response)),
     ?assertEqual(Response, ?MODULE:encode(Result)).
 
+empty_call_test() ->
+    Call = {xmlel,<<"methodCall">>,[],
+	    [{xmlel,<<"methodName">>,[],
+	      [{xmlcdata,<<"some_method">>}]}]},
+    Result = {call, some_method, []},
+    ?assertEqual({ok, Result}, ?MODULE:decode(Call)),
+    ?assertEqual(Call, ?MODULE:encode(Result)).
+
+empty_response_test() ->
+    Response = {xmlel,<<"methodResponse">>, [], []},
+    Result = {response, []},
+    ?assertEqual({ok, Result}, ?MODULE:decode(Response)),
+    ?assertEqual(Response, ?MODULE:encode(Result)).
+
 -endif.
