@@ -86,6 +86,8 @@ encode_param(B) when is_boolean(B) ->
     {{boolean, B}, undefined};
 encode_param(S) when is_binary(S) ->
     {{string, S}, undefined};
+encode_param(S) when is_list(S) ->
+    {{string, iolist_to_binary(S)}, undefined};
 encode_param(D) when is_float(D) ->
     {{double, D}, undefined};
 encode_param({array, L}) ->
