@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  3 Oct 2014 by Evgeny Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
--module(xmlrpc).
+-module(p1_xmlrpc).
 
 %% API
 -export([decode/1, encode/1]).
