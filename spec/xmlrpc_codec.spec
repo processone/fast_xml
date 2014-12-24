@@ -66,16 +66,16 @@
 	   xmlns = <<"xmlrpc">>,
 	   result = {i4, '$cdata'},
 	   cdata = #cdata{required = true,
-			  dec = {erlang, binary_to_integer, []},
-			  enc = {erlang, integer_to_binary, []}}}).
+			  dec = {xml_util, binary_to_integer, []},
+			  enc = {xml_util, integer_to_binary, []}}}).
 
 -xml(int,
      #elem{name = <<"int">>,
 	   xmlns = <<"xmlrpc">>,
 	   result = {int, '$cdata'},
 	   cdata = #cdata{required = true,
-			  dec = {erlang, binary_to_integer, []},
-			  enc = {erlang, integer_to_binary, []}}}).
+			  dec = {xml_util, binary_to_integer, []},
+			  enc = {xml_util, integer_to_binary, []}}}).
 
 -xml(string,
      #elem{name = <<"string">>,
@@ -87,8 +87,8 @@
 	   xmlns = <<"xmlrpc">>,
 	   result = {double, '$cdata'},
 	   cdata = #cdata{required = true,
-			  dec = {erlang, binary_to_float, []},
-			  enc = {erlang, float_to_binary, []}}}).
+			  dec = {xml_util, binary_to_float, []},
+			  enc = {xml_util, float_to_binary, []}}}).
 
 -xml(base64,
      #elem{name = <<"base64">>,
