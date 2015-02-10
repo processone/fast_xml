@@ -2,6 +2,8 @@
 
 Fast Expat based Erlang XML parsing library, with a strong focus on XML stream parsing from network.
 
+Note: This module obsolete and supercede exmpp.
+
 XML streaming parser example:
 
 ```
