@@ -4,6 +4,7 @@ Fast Expat based Erlang XML parsing library, with a strong focus on XML stream p
 
 XML streaming parser example:
 
+```
 $ erl -pa ebin 
 Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
@@ -47,5 +48,5 @@ ok
 8> flush().
 Shell got {'$gen_event',{xmlstreamend,<<"test">>}}
 ok
-
+```
 
