@@ -80,6 +80,7 @@
 -xml(string,
      #elem{name = <<"string">>,
 	   xmlns = <<"xmlrpc">>,
+	   cdata = #cdata{default = <<"">>},
 	   result = {string, '$cdata'}}).
 
 -xml(double,
