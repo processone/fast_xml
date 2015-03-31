@@ -8,24 +8,24 @@
 %%%-------------------------------------------------------------------
 Cfg = [{full_xml, @full_xml@},
        {flash_hack, @flash_hack@},
-       {nif, @nif@}].
+       {disable_nif, @disable_nif@}].
 
 Macros = lists:flatmap(
            fun({full_xml, true}) ->
                    [{d, 'FULL_XML_SUPPORT'}];
-              ({nif, true}) ->
-                   [{d, 'NIF'}];
+              ({disable_nif, true}) ->
+                   [{d, 'DISABLE_NIF'}];
               ({flash_hack, true}) ->
                    [{d, 'ENABLE_FLASH_HACK'}];
               (_) ->
                    []
            end, Cfg),
 
-NIFPortSpec = case lists:keysearch(nif, 1, Cfg) of
-                  {value, {nif, true}} ->
-                      [{"priv/lib/xml.so", ["c_src/xml.c"]}];
+NIFPortSpec = case lists:keysearch(disable_nif, 1, Cfg) of
+                  {value, {disable_nif, true}} ->
+                      [];
                   _ ->
-                      []
+                      [{"priv/lib/xml.so", ["c_src/xml.c"]}]
               end,
 
 FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of
