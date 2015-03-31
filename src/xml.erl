@@ -62,10 +62,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [],
 			  []).
 
+%% Can be choosen with ./configure --disable-nif
+-ifdef(DISABLE_NIF).
+init([]) ->
+    {ok, []}.
+-else.
 %% Replace element_to_binary/1 with NIF
-%% Can be choosen with ./configure --enable-nif
--ifdef(NIF).
-
+%% Can be choosen with ./configure --disable-nif
 init([]) ->
     SOPath = filename:join(get_so_path(), "xml"),
     case catch erlang:load_nif(SOPath, 0) of
@@ -73,12 +76,6 @@ init([]) ->
         Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err])
     end,
     {ok, []}.
-
--else.
-
-init([]) ->
-    {ok, []}.
-
 -endif.
 
 %%% --------------------------------------------------------
