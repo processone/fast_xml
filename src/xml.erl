@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : xml.erl
 %%% Author  : Alexey Shchepin <alexey@process-one.net>
-%%% Purpose : XML utils
+%%% Purpose : XML utils for parsing, matching, processing XML
 %%% Created : 20 Nov 2002 by Alexey Shchepin <alexey@process-one.net>
 %%%
 %%%
@@ -34,8 +34,8 @@
 	 crypt/1, make_text_node/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
-	 get_tag_attr_s/2, get_subtag/2, get_subtag_cdata/2,
-         get_subtag_with_xmlns/3,
+	 get_tag_attr_s/2, get_subtag/2, get_subtags/2, get_subtag_cdata/2,
+         get_subtag_with_xmlns/3, get_subtags_with_xmlns/3,
 	 append_subtags/2, get_path_s/2,
 	 replace_tag_attr/3, to_xmlel/1]).
 
@@ -378,12 +378,30 @@ get_subtag(#xmlel{children = Els}, Name) ->
     -> xmlel() | false
 ).
 
-get_subtag1([El | Els], Name) ->
+get_subtag1( [El | Els], Name) ->
     case El of
       #xmlel{name = Name} -> El;
       _ -> get_subtag1(Els, Name)
     end;
 get_subtag1([], _) -> false.
+
+-spec(get_subtags/2 ::
+(
+  Xmlel :: xmlel(),
+  Name  :: binary())
+    -> [xmlel()]
+).
+
+get_subtags(#xmlel{children = Els}, Name) ->
+    get_subtags1(Els, Name, []).
+
+get_subtags1([], _Name, Acc) ->
+    lists:reverse(Acc);
+get_subtags1([El | Els], Name, Acc) ->
+    case El of
+        #xmlel{name = Name} -> get_subtags1(Els, Name, [El|Acc]);
+        _ -> get_subtags1(Els, Name, Acc)
+    end.
 
 %%
 -spec(get_subtag_with_xmlns/3 ::
@@ -420,6 +438,32 @@ get_subtag_with_xmlns1([El | Els], Name, XMLNS) ->
     end;
 get_subtag_with_xmlns1([], _, _) ->
     false.
+
+-spec(get_subtags_with_xmlns/3 ::
+(
+  Xmlel :: xmlel(),
+  Name  :: binary(),
+  XMLNS :: binary())
+    -> [xmlel()]
+).
+
+get_subtags_with_xmlns(#xmlel{children = Els}, Name, XMLNS) ->
+    get_subtags_with_xmlns1(Els, Name, XMLNS, []).
+
+get_subtags_with_xmlns1([], _Name, _XMLNS, Acc) ->
+    lists:reverse(Acc);
+get_subtags_with_xmlns1([El | Els], Name, XMLNS, Acc) ->
+    case El of
+	#xmlel{name = Name, attrs = Attrs} ->
+            case get_attr(<<"xmlns">>, Attrs) of
+                {value, XMLNS} ->
+                    get_subtags_with_xmlns1(Els, Name, XMLNS, [El|Acc]);
+                _ ->
+                    get_subtags_with_xmlns1(Els, Name, XMLNS, Acc)
+            end;
+	_ ->
+	    get_subtags_with_xmlns1(Els, Name, XMLNS, Acc)
+    end.
 
 %%
 -spec(get_subtag_cdata/2 ::
