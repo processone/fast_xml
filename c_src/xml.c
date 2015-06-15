@@ -128,6 +128,40 @@ static void xml_encode(ErlNifEnv* env, struct buf *rbuf, unsigned char *data, in
   };
 }
 
+static void attr_encode(ErlNifEnv* env, struct buf *rbuf, unsigned char *data, int len)
+{
+  int i;
+
+  for (i = 0; i < len; i++) {
+    switch (data[i]) {
+    case '&':
+      buf_add_str(env, rbuf, "&amp;", 5);
+      break;
+    case '<':
+      buf_add_str(env, rbuf, "&lt;", 4);
+      break;
+    case '"':
+      buf_add_str(env, rbuf, "&quot;", 6);
+      break;
+    case '\'':
+      buf_add_str(env, rbuf, "&apos;", 6);
+      break;
+    case '\t':
+      buf_add_str(env, rbuf, "&#x9;", 5);
+      break;
+    case '\n':
+      buf_add_str(env, rbuf, "&#xA;", 5);
+      break;
+    case '\r':
+      buf_add_str(env, rbuf, "&#xD;", 5);
+      break;
+    default:
+      buf_add_char(env, rbuf, data[i]);
+      break;
+    };
+  };
+}
+
 static int make_elements(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM els)
 {
   ERL_NIF_TERM head, tail;
@@ -160,7 +194,7 @@ static int make_attrs(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM attrs)
 	  buf_add_char(env, rbuf, ' ');
 	  buf_add_str(env, rbuf, (char *)name.data, name.size);
 	  buf_add_str(env, rbuf, "='", 2);
-	  xml_encode(env, rbuf, data.data, data.size);
+	  attr_encode(env, rbuf, data.data, data.size);
 	  buf_add_char(env, rbuf, '\'');
 	  attrs = tail;
 	} else {
