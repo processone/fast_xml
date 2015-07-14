@@ -110,12 +110,12 @@ get_ns(_) -> <<>>.
 dec_int(Val) -> dec_int(Val, infinity, infinity).
 
 dec_int(Val, Min, Max) ->
-    case xml_util:binary_to_integer(Val) of
+    case list_to_integer(binary_to_list(Val)) of
       Int when Int =< Max, Min == infinity -> Int;
       Int when Int =< Max, Int >= Min -> Int
     end.
 
-enc_int(Int) -> xml_util:integer_to_binary(Int).
+enc_int(Int) -> list_to_binary(integer_to_list(Int)).
 
 dec_enum(Val, Enums) ->
     AtomVal = erlang:binary_to_existing_atom(Val, utf8),
@@ -507,10 +507,10 @@ encode_string({string, Cdata}, _xmlns_attrs) ->
     _attrs = _xmlns_attrs,
     {xmlel, <<"string">>, _attrs, _els}.
 
-decode_string_cdata(__TopXMLNS, <<>>) -> undefined;
+decode_string_cdata(__TopXMLNS, <<>>) -> <<>>;
 decode_string_cdata(__TopXMLNS, _val) -> _val.
 
-encode_string_cdata(undefined, _acc) -> _acc;
+encode_string_cdata(<<>>, _acc) -> _acc;
 encode_string_cdata(_val, _acc) ->
     [{xmlcdata, _val} | _acc].
 

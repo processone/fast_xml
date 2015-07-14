@@ -6,9 +6,9 @@
 %%% @end
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
-Cfg = [{full_xml, @full_xml@},
-       {flash_hack, @flash_hack@},
-       {disable_nif, @disable_nif@}].
+Cfg = [{full_xml, false},
+       {flash_hack, false},
+       {disable_nif, false}].
 
 Macros = lists:flatmap(
            fun({full_xml, true}) ->
