@@ -37,7 +37,7 @@
 	 get_tag_attr_s/2, get_subtag/2, get_subtag_cdata/2,
          get_subtag_with_xmlns/3,
 	 append_subtags/2, get_path_s/2,
-	 replace_tag_attr/3, to_xmlel/1]).
+	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
 
 %% Internal exports, call-back functions.
 -export([start_link/0, init/1, handle_call/3, handle_cast/2,
@@ -486,6 +486,23 @@ get_path_s(El, [cdata]) -> get_tag_cdata(El).
 replace_tag_attr(Name, Value, Xmlel) ->
     Xmlel#xmlel{
         attrs = [{Name, Value} | lists:keydelete(Name, 1, Xmlel#xmlel.attrs)]
+    }.
+
+
+-spec(replace_subtag/2 ::
+(
+  Tag   :: xmlel(),
+  Xmlel :: xmlel())
+    -> Xmlel :: #xmlel{
+           name     :: binary(),
+           attrs    :: [attr(),...],
+           children :: [xmlel() | cdata()]
+       }
+).
+
+replace_subtag(#xmlel{name = Name} = Tag, Xmlel) ->
+    Xmlel#xmlel{
+        children = [Tag | lists:keydelete(Name, #xmlel.name, Xmlel#xmlel.children)]
     }.
 
 to_xmlel({_, Name, Attrs, Els}) ->
