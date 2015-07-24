@@ -239,6 +239,9 @@ remove_cdata_p(_) -> false.
 
 remove_cdata(L) -> [E || E <- L, remove_cdata_p(E)].
 
+%% This function is intended to remove subtags based on a name and an
+%% attribute, usually an xmlns attribute for a specific XMPP
+%% extension.
 -spec(remove_subtags/3 ::
 (
   Xmlel :: xmlel(),
