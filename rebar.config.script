@@ -6,9 +6,9 @@
 %%% @end
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
-Cfg = [{full_xml, @full_xml@},
-       {flash_hack, @flash_hack@},
-       {disable_nif, @disable_nif@}].
+Cfg = [{full_xml, false},
+       {flash_hack, false},
+       {disable_nif, false}].
 
 Macros = lists:flatmap(
            fun({full_xml, true}) ->
@@ -36,8 +36,8 @@ FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of
                 end,
 
 Config = [{erl_opts, [debug_info, {src_dirs, [src, specs]}|Macros]},
-          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall @EXPAT_CFLAGS@" ++ FlashHackFlag},
-                      {"LDFLAGS", "$LDFLAGS @EXPAT_LDFLAGS@ @EXPAT_LIBS@"}]},
+          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall" ++ FlashHackFlag},
+                      {"LDFLAGS", "$LDFLAGS -lexpat"}]},
           {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
                         | NIFPortSpec]}],
 %%io:format("xml configuration:~n  ~p~n", [Config]),

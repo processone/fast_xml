@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : xml.erl
 %%% Author  : Alexey Shchepin <alexey@process-one.net>
-%%% Purpose : XML utils
+%%% Purpose : XML utils for parsing, matching, processing XML
 %%% Created : 20 Nov 2002 by Alexey Shchepin <alexey@process-one.net>
 %%%
 %%%
@@ -34,10 +34,10 @@
 	 crypt/1, make_text_node/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
-	 get_tag_attr_s/2, get_subtag/2, get_subtag_cdata/2,
-         get_subtag_with_xmlns/3,
+	 get_tag_attr_s/2, get_subtag/2, get_subtags/2, get_subtag_cdata/2,
+         get_subtag_with_xmlns/3, get_subtags_with_xmlns/3,
 	 append_subtags/2, get_path_s/2,
-	 replace_tag_attr/3, to_xmlel/1]).
+	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
 
 %% Internal exports, call-back functions.
 -export([start_link/0, init/1, handle_call/3, handle_cast/2,
@@ -62,10 +62,13 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [],
 			  []).
 
+%% Can be choosen with ./configure --disable-nif
+-ifdef(DISABLE_NIF).
+init([]) ->
+    {ok, []}.
+-else.
 %% Replace element_to_binary/1 with NIF
-%% Can be choosen with ./configure --enable-nif
--ifdef(NIF).
-
+%% Can be choosen with ./configure --disable-nif
 init([]) ->
     SOPath = filename:join(get_so_path(), "xml"),
     case catch erlang:load_nif(SOPath, 0) of
@@ -73,12 +76,6 @@ init([]) ->
         Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err])
     end,
     {ok, []}.
-
--else.
-
-init([]) ->
-    {ok, []}.
-
 -endif.
 
 %%% --------------------------------------------------------
@@ -242,6 +239,9 @@ remove_cdata_p(_) -> false.
 
 remove_cdata(L) -> [E || E <- L, remove_cdata_p(E)].
 
+%% This function is intended to remove subtags based on a name and an
+%% attribute, usually an xmlns attribute for a specific XMPP
+%% extension.
 -spec(remove_subtags/3 ::
 (
   Xmlel :: xmlel(),
@@ -381,12 +381,30 @@ get_subtag(#xmlel{children = Els}, Name) ->
     -> xmlel() | false
 ).
 
-get_subtag1([El | Els], Name) ->
+get_subtag1( [El | Els], Name) ->
     case El of
       #xmlel{name = Name} -> El;
       _ -> get_subtag1(Els, Name)
     end;
 get_subtag1([], _) -> false.
+
+-spec(get_subtags/2 ::
+(
+  Xmlel :: xmlel(),
+  Name  :: binary())
+    -> [xmlel()]
+).
+
+get_subtags(#xmlel{children = Els}, Name) ->
+    get_subtags1(Els, Name, []).
+
+get_subtags1([], _Name, Acc) ->
+    lists:reverse(Acc);
+get_subtags1([El | Els], Name, Acc) ->
+    case El of
+        #xmlel{name = Name} -> get_subtags1(Els, Name, [El|Acc]);
+        _ -> get_subtags1(Els, Name, Acc)
+    end.
 
 %%
 -spec(get_subtag_with_xmlns/3 ::
@@ -423,6 +441,32 @@ get_subtag_with_xmlns1([El | Els], Name, XMLNS) ->
     end;
 get_subtag_with_xmlns1([], _, _) ->
     false.
+
+-spec(get_subtags_with_xmlns/3 ::
+(
+  Xmlel :: xmlel(),
+  Name  :: binary(),
+  XMLNS :: binary())
+    -> [xmlel()]
+).
+
+get_subtags_with_xmlns(#xmlel{children = Els}, Name, XMLNS) ->
+    get_subtags_with_xmlns1(Els, Name, XMLNS, []).
+
+get_subtags_with_xmlns1([], _Name, _XMLNS, Acc) ->
+    lists:reverse(Acc);
+get_subtags_with_xmlns1([El | Els], Name, XMLNS, Acc) ->
+    case El of
+	#xmlel{name = Name, attrs = Attrs} ->
+            case get_attr(<<"xmlns">>, Attrs) of
+                {value, XMLNS} ->
+                    get_subtags_with_xmlns1(Els, Name, XMLNS, [El|Acc]);
+                _ ->
+                    get_subtags_with_xmlns1(Els, Name, XMLNS, Acc)
+            end;
+	_ ->
+	    get_subtags_with_xmlns1(Els, Name, XMLNS, Acc)
+    end.
 
 %%
 -spec(get_subtag_cdata/2 ::
@@ -486,6 +530,23 @@ get_path_s(El, [cdata]) -> get_tag_cdata(El).
 replace_tag_attr(Name, Value, Xmlel) ->
     Xmlel#xmlel{
         attrs = [{Name, Value} | lists:keydelete(Name, 1, Xmlel#xmlel.attrs)]
+    }.
+
+
+-spec(replace_subtag/2 ::
+(
+  Tag   :: xmlel(),
+  Xmlel :: xmlel())
+    -> Xmlel :: #xmlel{
+           name     :: binary(),
+           attrs    :: [attr(),...],
+           children :: [xmlel() | cdata()]
+       }
+).
+
+replace_subtag(#xmlel{name = Name} = Tag, Xmlel) ->
+    Xmlel#xmlel{
+        children = [Tag | lists:keydelete(Name, #xmlel.name, Xmlel#xmlel.children)]
     }.
 
 to_xmlel({_, Name, Attrs, Els}) ->
