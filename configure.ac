@@ -5,6 +5,8 @@ AC_PREREQ(2.53)
 AC_PACKAGE_VERSION(0.1.0)
 AC_INIT(xml, 0.1.0, [], [])
 
+AC_CONFIG_MACRO_DIR([m4])
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_MAKE_SET
@@ -28,16 +30,15 @@ AC_ERLANG_NEED_ERLC
 # AC_ERLANG_SUBST_ROOT_DIR
 # AC_ERLANG_SUBST_LIB_DIR
 
-AC_CHECK_LIB(expat, XML_ParserCreate, [EXPAT_LIB=yes], [], [])
-AC_CHECK_HEADER(expat.h, [EXPAT_HEADER=yes], [], [])
+AX_LIB_EXPAT([2.0.0])
 
-if test "x$EXPAT_LIB" = "x"; then
-   AC_MSG_ERROR([Expat library was not found])
+if test "$HAVE_EXPAT" = "no"; then
+   AC_MSG_ERROR([Expat XML Parser was not found])
 fi
 
-if test "x$EXPAT_HEADER" = "x"; then
-   AC_MSG_ERROR([Expat header file "expat.h" was not found])
-fi
+AC_SUBST(EXPAT_CFLAGS)
+AC_SUBST(EXPAT_LIBS)
+AC_SUBST(EXPAT_LDFLAGS)
 
 AC_ARG_ENABLE(full_xml,
 [AC_HELP_STRING([--enable-full-xml], [use XML features in XMPP stream (ex: CDATA) (default: no, requires XML compliant clients)])],
