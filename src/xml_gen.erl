@@ -1729,7 +1729,7 @@ get_fun_return_type(_) ->
 
 term_is_record(Term) ->
     try
-        [H|T]= tuple_to_list(Term),
+        [H|_T]= tuple_to_list(Term),
         true = is_atom(H),
         false == is_label(H)
     catch _:_ ->
