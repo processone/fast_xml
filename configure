@@ -620,7 +620,6 @@ ac_includes_default="\
 
 ac_subst_vars='LTLIBOBJS
 flash_hack
-disable_nif
 full_xml
 EXPAT_VERSION
 EXPAT_LIBS
@@ -689,7 +688,6 @@ with_expat
 with_expat_inc
 with_expat_lib
 enable_full_xml
-enable_disable_nif
 enable_flash_hack
 '
       ac_precious_vars='build_alias
@@ -1318,7 +1316,6 @@ Optional Features:
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
   --enable-full-xml       use XML features in XMPP stream (ex: CDATA)
                           (default: no, requires XML compliant clients)
-  --disable-nif           (default: no)
   --enable-flash-hack     support Adobe Flash client XML (default: no)
 
 Optional Packages:
@@ -4368,19 +4365,6 @@ if test "${enable_full_xml+set}" = set; then :
 esac
 else
   full_xml=false
-fi
-
-
-
-# Check whether --enable-disable_nif was given.
-if test "${enable_disable_nif+set}" = set; then :
-  enableval=$enable_disable_nif; case "${enableval}" in
-  yes) disable_nif=true ;;
-  no)  disable_nif=false ;;
-  *) as_fn_error $? "bad value ${enableval} for --disable-nif" "$LINENO" 5 ;;
-esac
-else
-  disable_nif=false
 fi
 
 

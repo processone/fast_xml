@@ -5,7 +5,7 @@
 %%% Created : 20 Nov 2002 by Alexey Shchepin <alexey@process-one.net>
 %%%
 %%%
-%%% p1_xml, Copyright (C) 2002-2015   ProcessOne
+%%% xml, Copyright (C) 2002-2015   ProcessOne
 %%%
 %%% This program is free software; you can redistribute it and/or
 %%% modify it under the terms of the GNU General Public License as
@@ -62,13 +62,7 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [],
 			  []).
 
-%% Can be choosen with ./configure --disable-nif
--ifdef(DISABLE_NIF).
-init([]) ->
-    {ok, []}.
--else.
 %% Replace element_to_binary/1 with NIF
-%% Can be choosen with ./configure --disable-nif
 init([]) ->
     SOPath = filename:join(get_so_path(), "xml"),
     case catch erlang:load_nif(SOPath, 0) of
@@ -76,7 +70,6 @@ init([]) ->
         Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err])
     end,
     {ok, []}.
--endif.
 
 %%% --------------------------------------------------------
 %%% The call-back functions.

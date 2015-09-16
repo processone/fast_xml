@@ -1,11 +1,11 @@
-%%%----------------------------------------------------------------------
+%%%-------------------------------------------------------------------
 %%% File    : p1_xmlrpc.erl
 %%% Author  : Evgeny Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : XMLRPC encoder/decoder
 %%% Created : 3 Oct 2014 by Evgeny Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
-%%% p1_xml, Copyright (C) 2002-2015   ProcessOne
+%%% xml, Copyright (C) 2002-2015   ProcessOne
 %%%
 %%% This program is free software; you can redistribute it and/or
 %%% modify it under the terms of the GNU General Public License as
@@ -22,8 +22,7 @@
 %%% Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
 %%% 02111-1307 USA
 %%%
-%%%----------------------------------------------------------------------
-
+%%%-------------------------------------------------------------------
 -module(p1_xmlrpc).
 
 %% API

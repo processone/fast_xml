@@ -49,15 +49,6 @@ AC_ARG_ENABLE(full_xml,
 esac],[full_xml=false])
 AC_SUBST(full_xml)
 
-AC_ARG_ENABLE(disable_nif,
-[AC_HELP_STRING([--disable-nif], [ (default: no)])],
-[case "${enableval}" in
-  yes) disable_nif=true ;;
-  no)  disable_nif=false ;;
-  *) AC_MSG_ERROR(bad value ${enableval} for --disable-nif) ;;
-esac],[disable_nif=false])
-AC_SUBST(disable_nif)
-
 AC_ARG_ENABLE(flash_hack,
 [AC_HELP_STRING([--enable-flash-hack], [support Adobe Flash client XML (default: no)])],
 [case "${enableval}" in

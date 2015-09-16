@@ -7,8 +7,7 @@
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
 Cfg = [{full_xml, false},
-       {flash_hack, false},
-       {disable_nif, false}].
+       {flash_hack, false}].
 
 Macros = lists:flatmap(
            fun({full_xml, true}) ->
@@ -25,7 +24,8 @@ NIFPortSpec = case lists:keysearch(disable_nif, 1, Cfg) of
                   {value, {disable_nif, true}} ->
                       [];
                   _ ->
-                      [{"priv/lib/xml.so", ["c_src/xml.c"]}]
+                      [{"priv/lib/xml.so", ["c_src/xml.c"]},
+                       {"priv/lib/xml_stream.so", ["c_src/xml_stream.c"]}]
               end,
 
 FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of

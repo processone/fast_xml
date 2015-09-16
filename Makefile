@@ -6,7 +6,10 @@ src:
 clean:
 	rebar clean
 
-test:
-	rebar eunit
+test: all
+	rebar -v skip_deps=true eunit
 
-.PHONY: clean src test
+check-syntax:
+	gcc -o nul -S ${CHK_SOURCES}
+
+.PHONY: clean src test all

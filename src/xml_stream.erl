@@ -5,7 +5,7 @@
 %%% Created : 17 Nov 2002 by Alexey Shchepin <alexey@process-one.net>
 %%%
 %%%
-%%% p1_xml, Copyright (C) 2002-2015   ProcessOne
+%%% xml, Copyright (C) 2002-2015   ProcessOne
 %%%
 %%% This program is free software; you can redistribute it and/or
 %%% modify it under the terms of the GNU General Public License as
@@ -79,7 +79,7 @@ start_link() ->
 			  []).
 
 init([]) ->
-    case load_driver() of
+    case load_dlls() of
         ok ->
             {ok, []};
         {error, Why} ->
@@ -194,7 +194,8 @@ parse(#xml_stream_state{callback_pid = CallbackPid,
 			port = Port, stack = Stack, size = Size,
 			maxsize = MaxSize} =
 	  State,
-      Str) ->
+      Str1) ->
+    Str = iolist_to_binary(Str1),
     StrSize = byte_size(Str),
     Res = port_control(Port, ?PARSE_COMMAND, Str),
     {NewStack, NewSize} = lists:foldl(fun (Data,
@@ -286,6 +287,23 @@ get_so_path() ->
     EbinDir = filename:dirname(code:which(?MODULE)),
     AppDir = filename:dirname(EbinDir),
     filename:join([AppDir, "priv", "lib"]).
+
+load_dlls() ->
+    case load_nif() of
+	ok -> load_driver();
+	Err -> Err
+    end.
+
+load_nif() ->
+    NifFile = filename:join([get_so_path(), atom_to_list(?MODULE)]),
+    case erlang:load_nif(NifFile, 0) of
+	ok ->
+	    ok;
+        {error, {Reason, Txt}} ->
+            error_logger:error_msg("failed to load NIF ~s: ~s",
+                                   [NifFile, Txt]),
+            {error, Reason}
+    end.
 
 load_driver() ->
     case erl_ddll:load_driver(get_so_path(), expat_erl) of
