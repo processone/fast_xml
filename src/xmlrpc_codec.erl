@@ -476,7 +476,7 @@ decode_double_cdata(__TopXMLNS, <<>>) ->
     erlang:error({xmlrpc_codec,
 		  {missing_cdata, <<>>, <<"double">>, __TopXMLNS}});
 decode_double_cdata(__TopXMLNS, _val) ->
-    case catch xml_util:binary_to_float(_val) of
+    case catch erlang:binary_to_float(_val) of
       {'EXIT', _} ->
 	  erlang:error({xmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"double">>, __TopXMLNS}});
@@ -484,7 +484,7 @@ decode_double_cdata(__TopXMLNS, _val) ->
     end.
 
 encode_double_cdata(_val, _acc) ->
-    [{xmlcdata, xml_util:float_to_binary(_val)} | _acc].
+    [{xmlcdata, erlang:float_to_binary(_val)} | _acc].
 
 decode_string(__TopXMLNS, __IgnoreEls,
 	      {xmlel, <<"string">>, _attrs, _els}) ->
@@ -539,7 +539,7 @@ decode_int_cdata(__TopXMLNS, <<>>) ->
     erlang:error({xmlrpc_codec,
 		  {missing_cdata, <<>>, <<"int">>, __TopXMLNS}});
 decode_int_cdata(__TopXMLNS, _val) ->
-    case catch xml_util:binary_to_integer(_val) of
+    case catch erlang:binary_to_integer(_val) of
       {'EXIT', _} ->
 	  erlang:error({xmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"int">>, __TopXMLNS}});
@@ -547,7 +547,7 @@ decode_int_cdata(__TopXMLNS, _val) ->
     end.
 
 encode_int_cdata(_val, _acc) ->
-    [{xmlcdata, xml_util:integer_to_binary(_val)} | _acc].
+    [{xmlcdata, erlang:integer_to_binary(_val)} | _acc].
 
 decode_i4(__TopXMLNS, __IgnoreEls,
 	  {xmlel, <<"i4">>, _attrs, _els}) ->
@@ -574,7 +574,7 @@ decode_i4_cdata(__TopXMLNS, <<>>) ->
     erlang:error({xmlrpc_codec,
 		  {missing_cdata, <<>>, <<"i4">>, __TopXMLNS}});
 decode_i4_cdata(__TopXMLNS, _val) ->
-    case catch xml_util:binary_to_integer(_val) of
+    case catch erlang:binary_to_integer(_val) of
       {'EXIT', _} ->
 	  erlang:error({xmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"i4">>, __TopXMLNS}});
@@ -582,7 +582,7 @@ decode_i4_cdata(__TopXMLNS, _val) ->
     end.
 
 encode_i4_cdata(_val, _acc) ->
-    [{xmlcdata, xml_util:integer_to_binary(_val)} | _acc].
+    [{xmlcdata, erlang:integer_to_binary(_val)} | _acc].
 
 decode_value(__TopXMLNS, __IgnoreEls,
 	     {xmlel, <<"value">>, _attrs, _els}) ->
