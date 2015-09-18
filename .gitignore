@@ -1,6 +1,9 @@
 .rebar/
 c_src/*.o
+c_src/*.d
 config.log
 config.status
 ebin
 priv/
+.eunit
+_build
