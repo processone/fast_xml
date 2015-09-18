@@ -39,7 +39,8 @@ Config = [{erl_opts, [debug_info, {src_dirs, [src, specs]}|Macros]},
           {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall @EXPAT_CFLAGS@" ++ FlashHackFlag},
                       {"LDFLAGS", "$LDFLAGS @EXPAT_LDFLAGS@ @EXPAT_LIBS@"}]},
           {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
-                        | NIFPortSpec]}],
+                        | NIFPortSpec]},
+          {plugins, [rebar3_hex]}],
 %%io:format("xml configuration:~n  ~p~n", [Config]),
 Config.
 
