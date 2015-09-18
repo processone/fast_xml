@@ -37,18 +37,6 @@
 -export([start_link/0, init/1, handle_call/3, handle_cast/2,
 	 handle_info/2, code_change/3, terminate/2]).
 
--define(XML_START, 0).
-
--define(XML_END, 1).
-
--define(XML_CDATA, 2).
-
--define(XML_ERROR, 3).
-
--define(PARSE_COMMAND, 0).
-
--define(PARSE_FINAL_COMMAND, 1).
-
 -include("xml.hrl").
 
 -record(xml_stream_state,
@@ -67,10 +55,6 @@
 
 -type xml_stream_state() :: #xml_stream_state{}.
 -type stack() :: [xmlel()].
--type event() :: {?XML_START, {binary(), [attr()]}} |
-                 {?XML_END, binary()} |
-                 {?XML_CDATA, binary()} |
-                 {?XML_ERROR, binary()}.
 
 -export_type([xml_stream_state/0, xml_stream_el/0]).
 
@@ -105,183 +89,37 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 terminate(_Reason, _State) ->
     ok.
 
-process_data(CallbackPid, Stack, Data) ->
-    case Data of
-      {?XML_START, {Name, Attrs}} ->
-	  if
-		Stack == [] ->
-		    catch gen_fsm:send_event(CallbackPid,
-					  {xmlstreamstart, Name, Attrs}),
-		    %% There is no need to store name or attributes of
-		    %% stream opening element as it is not used
-		    %% anymore.
-		    [xmlstreamstart];
-		true ->
-		    [#xmlel{name = Name, attrs = Attrs, children = []}
-			| Stack]
-	  end;
-      {?XML_END, EndName} ->
-	  case Stack of
-	    [xmlstreamstart] ->
-		    catch gen_fsm:send_event(CallbackPid,
-					     {xmlstreamend, EndName}),
-		    [];
-	    [#xmlel{name = Name, attrs = Attrs, children = Els},
-	     xmlstreamstart] ->
-		NewEl = #xmlel{name = Name, attrs = Attrs,
-			       children = lists:reverse(Els)},
-		catch gen_fsm:send_event(CallbackPid,
-			    {xmlstreamelement, NewEl}),
-		[xmlstreamstart];
-	    [#xmlel{name = Name, attrs = Attrs, children = Els},
-	     #xmlel{name = Name1, attrs = Attrs1, children = Els1}
-	     | Tail] ->
-		NewEl = #xmlel{name = Name, attrs = Attrs,
-			       children = lists:reverse(Els)},
-		[{xmlel, Name1, Attrs1, [NewEl | Els1]} | Tail]
-	  end;
-      {?XML_CDATA, CData} ->
-	  case Stack of
-	    [xmlstreamstart] ->
-		catch gen_fsm:send_all_state_event(CallbackPid,
-						   {xmlstreamcdata, CData}),
-		[xmlstreamstart];
-	    %% Merge CDATA nodes if they are contiguous
-	    %% This does not change the semantic: the split in
-	    %% several CDATA nodes depends on the TCP/IP packet
-	    %% fragmentation
-	    [#xmlel{name = Name, attrs = Attrs,
-		    children = [{xmlcdata, PreviousCData} | Els]}
-	     | Tail] ->
-		[#xmlel{name = Name, attrs = Attrs,
-			children =
-			    [{xmlcdata,
-			      iolist_to_binary([PreviousCData, CData])}
-			     | Els]}
-		 | Tail];
-	    %% No previous CDATA
-	    [#xmlel{name = Name, attrs = Attrs, children = Els}
-	     | Tail] ->
-		[#xmlel{name = Name, attrs = Attrs,
-			children = [{xmlcdata, CData} | Els]}
-		 | Tail];
-	    [] -> []
-	  end;
-      {?XML_ERROR, Err} ->
-	  catch gen_fsm:send_event(CallbackPid,
-				   {xmlstreamerror, Err})
-    end.
-
 -spec new(pid()) -> xml_stream_state().
 
-new(CallbackPid) -> new(CallbackPid, infinity).
+new(CallbackPid) ->
+    new(CallbackPid, infinity).
 
 -spec new(pid(), non_neg_integer() | infinity) -> xml_stream_state().
 
-new(CallbackPid, MaxSize) ->
-    Port = open_port({spawn, "expat_erl"}, [binary]),
-    #xml_stream_state{callback_pid = CallbackPid,
-		      port = Port, stack = [], size = 0, maxsize = MaxSize}.
+new(_CallbackPid, _MaxSize) ->
+    erlang:nif_error(nif_not_loaded).
 
 -spec change_callback_pid(xml_stream_state(), pid()) -> xml_stream_state().
 
-change_callback_pid(State, CallbackPid) ->
-    State#xml_stream_state{callback_pid = CallbackPid}.
+change_callback_pid(_State, _CallbackPid) ->
+    erlang:nif_error(nif_not_loaded).
 
 -spec parse(xml_stream_state(), iodata()) -> xml_stream_state().
 
-parse(#xml_stream_state{callback_pid = CallbackPid,
-			port = Port, stack = Stack, size = Size,
-			maxsize = MaxSize} =
-	  State,
-      Str1) ->
-    Str = iolist_to_binary(Str1),
-    StrSize = byte_size(Str),
-    Res = port_control(Port, ?PARSE_COMMAND, Str),
-    {NewStack, NewSize} = lists:foldl(fun (Data,
-					   {St, Sz}) ->
-					      NewSt = process_data(CallbackPid,
-								   St, Data),
-					      case NewSt of
-						[_] -> {NewSt, 0};
-						_ -> {NewSt, Sz}
-					      end
-				      end,
-				      {Stack, Size + StrSize},
-				      binary_to_term(Res)),
-    if NewSize > MaxSize ->
-	   catch gen_fsm:send_event(CallbackPid,
-				    {xmlstreamerror,
-				     <<"XML stanza is too big">>});
-       true -> ok
-    end,
-    State#xml_stream_state{stack = NewStack,
-			   size = NewSize}.
+parse(_State, _Data) ->
+    erlang:nif_error(nif_not_loaded).
 
 -spec close(xml_stream_state()) -> true.
 
-close(#xml_stream_state{port = Port}) ->
-    port_close(Port).
+close(_State) ->
+    erlang:nif_error(nif_not_loaded).
 
 -spec parse_element(iodata()) -> xmlel() |
                                  {error, parse_error} |
                                  {error, binary()}.
 
-parse_element(Str) ->
-    Port = open_port({spawn, "expat_erl"}, [binary]),
-    Res = port_control(Port, ?PARSE_FINAL_COMMAND, Str),
-    port_close(Port),
-    process_element_events(binary_to_term(Res)).
-
-process_element_events(Events) ->
-    process_element_events(Events, []).
-
--spec process_element_events([event()], stack()) -> xmlel() |
-                                                    {error, parse_error} |
-                                                    {error, binary()}.
-
-process_element_events([], _Stack) ->
-    {error, parse_error};
-process_element_events([Event | Events], Stack) ->
-    case Event of
-      {?XML_START, {Name, Attrs}} ->
-	  process_element_events(Events,
-				 [#xmlel{name = Name, attrs = Attrs,
-					 children = []}
-				  | Stack]);
-      {?XML_END, _EndName} ->
-	  case Stack of
-	    [#xmlel{name = Name, attrs = Attrs, children = Els}
-	     | Tail] ->
-		NewEl = #xmlel{name = Name, attrs = Attrs,
-			       children = lists:reverse(Els)},
-		case Tail of
-		  [] ->
-		      if Events == [] -> NewEl;
-			 true -> {error, parse_error}
-		      end;
-		  [#xmlel{name = Name1, attrs = Attrs1, children = Els1}
-		   | Tail1] ->
-		      process_element_events(Events,
-					     [#xmlel{name = Name1,
-						     attrs = Attrs1,
-						     children = [NewEl | Els1]}
-					      | Tail1])
-		end
-	  end;
-      {?XML_CDATA, CData} ->
-	  case Stack of
-	    [#xmlel{name = Name, attrs = Attrs, children = Els}
-	     | Tail] ->
-		process_element_events(Events,
-				       [#xmlel{name = Name, attrs = Attrs,
-					       children =
-						   [{xmlcdata, CData} | Els]}
-					| Tail]);
-	    [] -> process_element_events(Events, [])
-	  end;
-      {?XML_ERROR, Err} -> {error, Err}
-    end.
+parse_element(_Str) ->
+    erlang:nif_error(nif_not_loaded).
 
 get_so_path() ->
     EbinDir = filename:dirname(code:which(?MODULE)),
@@ -289,12 +127,6 @@ get_so_path() ->
     filename:join([AppDir, "priv", "lib"]).
 
 load_dlls() ->
-    case load_nif() of
-	ok -> load_driver();
-	Err -> Err
-    end.
-
-load_nif() ->
     NifFile = filename:join([get_so_path(), atom_to_list(?MODULE)]),
     case erlang:load_nif(NifFile, 0) of
 	ok ->
@@ -303,16 +135,4 @@ load_nif() ->
             error_logger:error_msg("failed to load NIF ~s: ~s",
                                    [NifFile, Txt]),
             {error, Reason}
-    end.
-
-load_driver() ->
-    case erl_ddll:load_driver(get_so_path(), expat_erl) of
-        ok ->
-            ok;
-        {error, already_loaded} ->
-            ok;
-        {error, ErrorDesc} = Err ->
-            error_logger:error_msg("failed to load Expat driver: ~s~n",
-                                   [erl_ddll:format_error(ErrorDesc)]),
-            Err
     end.

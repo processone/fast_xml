@@ -40,24 +40,4 @@ AC_SUBST(EXPAT_CFLAGS)
 AC_SUBST(EXPAT_LIBS)
 AC_SUBST(EXPAT_LDFLAGS)
 
-AC_ARG_ENABLE(full_xml,
-[AC_HELP_STRING([--enable-full-xml], [use XML features in XMPP stream (ex: CDATA) (default: no, requires XML compliant clients)])],
-[case "${enableval}" in
-  yes) full_xml=true ;;
-  no)  full_xml=false ;;
-  *) AC_MSG_ERROR(bad value ${enableval} for --enable-full-xml) ;;
-esac],[full_xml=false])
-AC_SUBST(full_xml)
-
-AC_ARG_ENABLE(flash_hack,
-[AC_HELP_STRING([--enable-flash-hack], [support Adobe Flash client XML (default: no)])],
-[case "${enableval}" in
-  yes) flash_hack=true ;;
-  no)  flash_hack=false ;;
-  *) AC_MSG_ERROR(bad value ${enableval} for --enable-flash-hack) ;;
-esac],[flash_hack=false])
-AC_SUBST(flash_hack)
-
-AC_CONFIG_FILES([rebar.config.script])
-
 AC_OUTPUT

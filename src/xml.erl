@@ -31,7 +31,7 @@
 -behaviour(gen_server).
 
 -export([element_to_binary/1, get_so_path/0,
-	 crypt/1, make_text_node/1, remove_cdata/1,
+	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
 	 get_tag_attr_s/2, get_subtag/2, get_subtags/2, get_subtag_cdata/2,
@@ -44,19 +44,6 @@
 	 handle_info/2, code_change/3, terminate/2]).
 
 -include("xml.hrl").
-
-%% Select at compile time how to escape characters in binary text
-%% nodes.
-%% Can be choosen with ./configure --enable-full-xml
--ifdef(FULL_XML_SUPPORT).
-
--define(ESCAPE_BINARY(CData), make_text_node(CData)).
-
--else.
-
--define(ESCAPE_BINARY(CData), crypt(CData)).
-
--endif.
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [],
@@ -130,7 +117,7 @@ element_to_string_nocatch(El) ->
 	  end;
       %% We do not crypt CDATA binary, but we enclose it in XML CDATA
       {xmlcdata, CData} ->
-	  ?ESCAPE_BINARY(CData)
+	  crypt(CData)
     end.
 
 attrs_to_list(Attrs) -> [attr_to_list(A) || A <- Attrs].
@@ -148,70 +135,6 @@ crypt(S) ->
               _ -> <<C>>
           end)/binary>>
        || <<C>> <= S >>.
-
-%%
--spec(make_text_node/1 ::
-(
-  CData :: binary())
-    -> binary()
-).
-
-make_text_node(CData) ->
-    case cdata_need_escape(CData) of
-      cdata ->
-	  CDATA1 = <<"<![CDATA[">>,
-	  CDATA2 = <<"]]>">>,
-	  iolist_to_binary([CDATA1, CData, CDATA2]);
-      none -> CData;
-      {cdata, EndTokens} ->
-	  EscapedCData = escape_cdata(CData, EndTokens),
-	  iolist_to_binary(EscapedCData)
-    end.
-
-cdata_need_escape(CData) ->
-    cdata_need_escape(CData, 0, false, []).
-
-cdata_need_escape(<<>>, _, false, _) -> none;
-cdata_need_escape(<<>>, _, true, []) -> cdata;
-cdata_need_escape(<<>>, _, true, CDataEndTokens) ->
-    {cdata, lists:reverse(CDataEndTokens)};
-cdata_need_escape(<<$], $], $>, Rest/binary>>,
-		  CurrentPosition, _XMLEscape, CDataEndTokens) ->
-    NewPosition = CurrentPosition + 3,
-    cdata_need_escape(Rest, NewPosition, true,
-		      [CurrentPosition + 1 | CDataEndTokens]);
-%% Only <, & need to be escaped in XML text node
-%% See reference: http://www.w3.org/TR/xml11/#syntax
-cdata_need_escape(<<$<, Rest/binary>>, CurrentPosition,
-		  _XMLEscape, CDataEndTokens) ->
-    cdata_need_escape(Rest, CurrentPosition + 1, true,
-		      CDataEndTokens);
-cdata_need_escape(<<$&, Rest/binary>>, CurrentPosition,
-		  _XMLEscape, CDataEndTokens) ->
-    cdata_need_escape(Rest, CurrentPosition + 1, true,
-		      CDataEndTokens);
-cdata_need_escape(<<_:8, Rest/binary>>, CurrentPosition,
-		  XMLEscape, CDataEndTokens) ->
-    cdata_need_escape(Rest, CurrentPosition + 1, XMLEscape,
-		      CDataEndTokens).
-
-escape_cdata(CData, EndTokens) ->
-    escape_cdata(CData, 0, EndTokens, []).
-
-escape_cdata(<<>>, _CurrentPosition, [], Acc) ->
-    lists:reverse(Acc);
-escape_cdata(Rest, CurrentPosition, [], Acc) ->
-    CDATA1 = <<"<![CDATA[">>,
-    CDATA2 = <<"]]>">>,
-    escape_cdata(<<>>, CurrentPosition, [],
-		 [CDATA2, Rest, CDATA1 | Acc]);
-escape_cdata(CData, Index, [Pos | Positions], Acc) ->
-    CDATA1 = <<"<![CDATA[">>,
-    CDATA2 = <<"]]>">>,
-    Split = Pos - Index,
-    {Part, Rest} = split_binary(CData, Split + 1),
-    escape_cdata(Rest, Pos + 1, Positions,
-		 [CDATA2, Part, CDATA1 | Acc]).
 
 %%
 -spec(remove_cdata_p/1 ::

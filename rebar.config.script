@@ -6,40 +6,14 @@
 %%% @end
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
-Cfg = [{full_xml, false},
-       {flash_hack, false}].
 
-Macros = lists:flatmap(
-           fun({full_xml, true}) ->
-                   [{d, 'FULL_XML_SUPPORT'}];
-              ({disable_nif, true}) ->
-                   [{d, 'DISABLE_NIF'}];
-              ({flash_hack, true}) ->
-                   [{d, 'ENABLE_FLASH_HACK'}];
-              (_) ->
-                   []
-           end, Cfg),
+NIFPortSpec = [{"priv/lib/xml.so", ["c_src/xml.c"]},
+               {"priv/lib/xml_stream.so", ["c_src/xml_stream.c"]}],
 
-NIFPortSpec = case lists:keysearch(disable_nif, 1, Cfg) of
-                  {value, {disable_nif, true}} ->
-                      [];
-                  _ ->
-                      [{"priv/lib/xml.so", ["c_src/xml.c"]},
-                       {"priv/lib/xml_stream.so", ["c_src/xml_stream.c"]}]
-              end,
-
-FlashHackFlag = case lists:keysearch(flash_hack, 1, Cfg) of
-                    {value, {flash_hack, true}} ->
-                        " -DENABLE_FLASH_HACK";
-                    _ ->
-                        ""
-                end,
-
-Config = [{erl_opts, [debug_info, {src_dirs, [src, specs]}|Macros]},
-          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall" ++ FlashHackFlag},
+Config = [{erl_opts, [debug_info, {src_dirs, [src, specs]}]},
+          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall"},
                       {"LDFLAGS", "$LDFLAGS -lexpat"}]},
-          {port_specs, [{"priv/lib/expat_erl.so", ["c_src/expat_erl.c"]}
-                        | NIFPortSpec]},
+          {port_specs, NIFPortSpec},
           {plugins, [rebar3_hex]}],
 %%io:format("xml configuration:~n  ~p~n", [Config]),
 Config.

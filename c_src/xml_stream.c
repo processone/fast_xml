@@ -527,37 +527,6 @@ static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
   if (!state->parser || !state->pid || !state->send_env)
     return enif_make_badarg(env);
 
-#ifdef ENABLE_FLASH_HACK
-        /* Flash hack - Flash clients send a null byte after the stanza.  Remove that... */
-        {
-	   char *buf = (char *) bin.data;
-           size_t len = bin.size;
-           int i;
-           int found_null = 0;
-
-           /* Maybe the Flash client sent many stanzas in one packet.
-              If so, there is a null byte between every stanza. */
-           for (i = 0; i < len; i++) {
-              if (buf[i] == '\0') {
-                 buf[i] = ' ';
-                 found_null = 1;
-              }
-           }
-
-           /* And also remove the closing slash if this is a
-              flash:stream element.  Assume that flash:stream is the
-              last element in the packet, and entirely contained in
-              it.  This requires that a null byte has been found. */
-           if (found_null && strstr(buf, "<flash:stream"))
-              /* buf[len - 1] is an erased null byte.
-                 buf[len - 2] is >
-                 buf[len - 3] is / (maybe)
-              */
-              if (buf[len - 3] == '/')
-                 buf[len - 3] = ' ';
-        }
-#endif /* ENABLE_FLASH_HACK */
-
   state->size += bin.size;
   state->env = env;
 
