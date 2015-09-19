@@ -30,8 +30,7 @@
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
-
--record(xmlel, {name = <<>>, attrs = [], children = []}).
+-include("xml.hrl").
 
 new() ->
     new(self()).
