@@ -13,7 +13,7 @@ It supports:
 
 Erlang XML parser can be build as follow:
 
-./configure && make
+    ./configure && make
 
 ## xmlel record and types
 
@@ -80,7 +80,7 @@ Shell got {'$gen_event',{xmlstreamstart,<<"root">>,[]}}
 ok
 
 % Feed more content:
-5> S3 = xml_stream:parse(S2, <<"<xmlelement>content cdata<xmlelement">>).
+5> S3 = xml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement">>).
 {xml_stream_state,<0.48.0>,#Port<0.768>,
                   [xmlstreamstart],
                   0,infinity}
