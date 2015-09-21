@@ -274,18 +274,6 @@ many_stream_elements_test() ->
 		end, Stream1, lists:seq(1, 100000)),
     close(Stream2).
 
--ifdef(ENABLE_FLASH_HACK).
-flash_hack_test() ->
-    CallbackPid = spawn_link(fun() -> receiver([]) end),
-    Stream0 = new(CallbackPid),
-    Stream1 = xml_stream:parse(Stream0, ["<root>", 0, "<a/>", 0, "</root>"]),
-    close(Stream1),
-    ?assertEqual([{xmlstreamstart, <<"root">>, []},
-		  {xmlstreamelement, #xmlel{name = <<"a">>}},
-		  {xmlstreamend, <<"root">>}],
-		 collect_events(CallbackPid)).
--endif.
-
 billionlaughs_test() ->
     Data =
 	"<?xml version='1.0'?><!DOCTYPE test [ <!ENTITY lol \"lol\"> "
