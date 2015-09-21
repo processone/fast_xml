@@ -66,13 +66,11 @@ ok
 
 % Create a new stream, using self PID to received XML parsing event:
 2> S1 = xml_stream:new(self()).
-{xml_stream_state,<0.32.0>,#Port<0.751>,[],0,infinity}
+<<>>
 
 % Start feeding content to the XML parser.
 3> S2 = xml_stream:parse(S1, <<"<root>">>).
-{xml_stream_state,<0.48.0>,#Port<0.768>,
-                  [xmlstreamstart],
-                  0,infinity}
+<<>>
 
 % Receive Erlang message send to shell process:
 4> flush().
@@ -81,9 +79,7 @@ ok
 
 % Feed more content:
 5> S3 = xml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement">>).
-{xml_stream_state,<0.48.0>,#Port<0.768>,
-                  [xmlstreamstart],
-                  0,infinity}
+<<>>
 
 % Receive more messages:
 6> flush().
@@ -95,7 +91,7 @@ ok
 
 % Feed more content:
 7> S4 = xml_stream:parse(S3, <<"</root>">>).      
-{xml_stream_state,<0.48.0>,#Port<0.768>,[],7,infinity}
+<<>>
 
 % Receive messages:
 8> flush().
