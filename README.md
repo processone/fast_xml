@@ -1,4 +1,4 @@
-# xml
+# Erlang XML [![Build Status](https://travis-ci.org/processone/xml.svg?branch=master)](https://travis-ci.org/processone/xml)
 
 Fast Expat based Erlang XML parsing library, with a strong focus on
 XML stream parsing from network.
