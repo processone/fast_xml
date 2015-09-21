@@ -15,6 +15,22 @@ Erlang XML parser can be build as follow:
 
     ./configure && make
 
+Erlang XML parser is a rebar-compatible OTP application. Alternatively, you can build it with rebar:
+
+    rebar compile
+
+## Dependencies
+
+Erlang XML parser depends on Expat XML parser. You need development
+headers for Expat library to build it.
+
+You can use `configure` options to pass custom path to Expat libraries and headers:
+
+    --with-expat=[ARG]      use Expat XML Parser from given prefix (ARG=path);
+                            check standard prefixes (ARG=yes); disable (ARG=no)
+    --with-expat-inc=[DIR]  path to Expat XML Parser headers
+    --with-expat-lib=[ARG]  link options for Expat XML Parser libraries
+
 ## xmlel record and types
 
 XML elements are provided as Erlang xmlel records.
@@ -33,7 +49,6 @@ cdata type is a tuple of the form:
 attr type if a tuple of the form:
 
     {Name::binary(), Value::binary()}
-
 
 ## XML full structure parsing
 
