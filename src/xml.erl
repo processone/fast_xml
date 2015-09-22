@@ -473,6 +473,8 @@ to_xmlel({xmlcdata, CData}) ->
 get_so_path() ->
     PrivDir = case code:priv_dir(p1_xml) of
                   {error, _} ->
+                      %% code:priv is looking for a directory with Name and optional version in path
+                      %% Search for p1_xml will fail if we are using xml as directory name:
                       code:priv_dir(xml);
                   V ->
                       V
