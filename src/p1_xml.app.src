@@ -30,7 +30,7 @@
   {mod,          {xml_app,[]}},
 
   %% hex.pm packaging:
-  {files, ["src/", "c_src/xml.c", "c_src/xml_stream.c", "include/", "spec/", "rebar.config.script"]},
+  {files, ["src/", "c_src/xml.c", "c_src/xml_stream.c", "include/", "spec/", "rebar.config.script", "README.md", "LICENSE.txt"]},
   {licenses, ["Apache"]},
   {contributors, ["ProcessOne"]},
   {links, [{"Github", "https://github.com/processone/xml"}]}]}.
