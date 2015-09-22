@@ -119,9 +119,8 @@ parse_element(_Str) ->
     erlang:nif_error(nif_not_loaded).
 
 get_so_path() ->
-    EbinDir = filename:dirname(code:which(?MODULE)),
-    AppDir = filename:dirname(EbinDir),
-    filename:join([AppDir, "priv", "lib"]).
+    PrivDir = code:priv_dir(p1_xml),
+    filename:join([PrivDir, "lib"]).
 
 load_dlls() ->
     NifFile = filename:join([get_so_path(), atom_to_list(?MODULE)]),

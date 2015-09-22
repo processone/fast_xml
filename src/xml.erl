@@ -471,6 +471,5 @@ to_xmlel({xmlcdata, CData}) ->
     {xmlcdata, iolist_to_binary(CData)}.
 
 get_so_path() ->
-    EbinDir = filename:dirname(code:which(?MODULE)),
-    AppDir = filename:dirname(EbinDir),
-    filename:join([AppDir, "priv", "lib"]).
+    PrivDir = code:priv_dir(p1_xml),
+    filename:join([PrivDir, "lib"]).
