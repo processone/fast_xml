@@ -471,5 +471,10 @@ to_xmlel({xmlcdata, CData}) ->
     {xmlcdata, iolist_to_binary(CData)}.
 
 get_so_path() ->
-    PrivDir = code:priv_dir(p1_xml),
+    PrivDir = case code:priv_dir(p1_xml) of
+                  {error, _} ->
+                      code:priv_dir(xml);
+                  V ->
+                      V
+              end,
     filename:join([PrivDir, "lib"]).
