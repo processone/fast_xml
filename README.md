@@ -1,4 +1,4 @@
-# Erlang and Elixir XML Parsing [![Build Status](https://travis-ci.org/processone/xml.svg?branch=master)](https://travis-ci.org/processone/xml)
+# Erlang and Elixir XML Parsing [![Build Status](https://travis-ci.org/processone/xml.svg?branch=master)](https://travis-ci.org/processone/xml) [![Coverage Status](https://coveralls.io/repos/processone/xml/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/xml?branch=master)
 
 Fast Expat based Erlang XML parsing and manipulation library, with a
 strong focus on XML stream parsing from network.
