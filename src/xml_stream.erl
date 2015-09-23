@@ -118,19 +118,8 @@ close(_State) ->
 parse_element(_Str) ->
     erlang:nif_error(nif_not_loaded).
 
-get_so_path() ->
-    PrivDir = case code:priv_dir(p1_xml) of
-                  {error, _} ->
-                      %% code:priv is looking for a directory with Name and optional version in path
-                      %% Search for p1_xml will fail if we are using xml as directory name:
-                      code:priv_dir(xml);
-                  V ->
-                      V
-              end,
-    filename:join([PrivDir, "lib"]).
-
 load_dlls() ->
-    NifFile = filename:join([get_so_path(), atom_to_list(?MODULE)]),
+    NifFile = filename:join([xml:get_so_path(), atom_to_list(?MODULE)]),
     case erlang:load_nif(NifFile, 0) of
 	ok ->
 	    ok;

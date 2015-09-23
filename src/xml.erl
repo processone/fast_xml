@@ -475,7 +475,14 @@ get_so_path() ->
                   {error, _} ->
                       %% code:priv is looking for a directory with Name and optional version in path
                       %% Search for p1_xml will fail if we are using xml as directory name:
-                      code:priv_dir(xml);
+                      case code:priv_dir(xml) of
+                          {error, _} ->
+                              EbinDir = filename:dirname(code:which(?MODULE)),
+                              AppDir = filename:dirname(EbinDir),
+                              filename:join([AppDir, "priv", "lib"]);
+                          V2 ->
+                              V2
+                      end;
                   V ->
                       V
               end,
