@@ -12,7 +12,7 @@ Cfg = case file:consult("vars.config") of
               Terms;
           _Err ->
               []
-      end ++ [{cflags, ""}, {ldflags, ""}],
+      end ++ [{cflags, ""}, {ldflags, "-lexpat"}],
 {cflags, CfgCFlags} = lists:keyfind(cflags, 1, Cfg),
 {ldflags, CfgLDFlags} = lists:keyfind(ldflags, 1, Cfg),
 
@@ -21,7 +21,7 @@ NIFPortSpec = [{"priv/lib/xml.so", ["c_src/xml.c"]},
 
 Config = [{erl_opts, [debug_info, {src_dirs, ["src"]}]},
           {port_env, [{"CFLAGS", CfgCFlags ++ " $CFLAGS -g -O2 -Wall"},
-                      {"LDFLAGS", CfgLDFlags ++ " $LDFLAGS -lexpat"}]},
+                      {"LDFLAGS", CfgLDFlags ++ " $LDFLAGS"}]},
           {port_specs, NIFPortSpec},
           {profiles, [{test, [{erl_opts, [{src_dirs, ["src", "test"]}]}]}]},
           {plugins, [rebar3_hex, rebar3_exunit]}],
