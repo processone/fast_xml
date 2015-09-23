@@ -81,46 +81,8 @@ terminate(_Reason, _State) ->
     -> binary()
 ).
 
-element_to_binary(El) ->
-    iolist_to_binary(element_to_string(El)).
-
-%%
--spec(element_to_string/1 ::
-(
-  El :: xmlel() | cdata())
-    -> string()
-).
-
-element_to_string(El) ->
-    case catch element_to_string_nocatch(El) of
-      {'EXIT', Reason} -> erlang:error({badxml, El, Reason});
-      Result -> Result
-    end.
-
--spec(element_to_string_nocatch/1 ::
-(
-  El :: xmlel() | cdata())
-    -> iolist()
-).
-
-element_to_string_nocatch(El) ->
-    case El of
-      #xmlel{name = Name, attrs = Attrs, children = Els} ->
-	  if Els /= [] ->
-		 [$<, Name, attrs_to_list(Attrs), $>,
-		  [element_to_string_nocatch(E) || E <- Els], $<, $/,
-		  Name, $>];
-	     true -> [$<, Name, attrs_to_list(Attrs), $/, $>]
-	  end;
-      %% We do not crypt CDATA binary, but we enclose it in XML CDATA
-      {xmlcdata, CData} ->
-	  crypt(CData)
-    end.
-
-attrs_to_list(Attrs) -> [attr_to_list(A) || A <- Attrs].
-
-attr_to_list({Name, Value}) ->
-    [$\s, Name, $=, $', crypt(Value), $'].
+element_to_binary(_El) ->
+    erlang:nif_error(nif_not_loaded).
 
 crypt(S) ->
     << <<(case C of

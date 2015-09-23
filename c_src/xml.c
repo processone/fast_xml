@@ -284,14 +284,6 @@ static ERL_NIF_TERM element_to(ErlNifEnv* env, int argc,
   return enif_make_badarg(env);
 }
 
-#ifdef SSL40
-static ERL_NIF_TERM element_to_string(ErlNifEnv* env, int argc,
-				      const ERL_NIF_TERM argv[])
-{
-  return element_to(env, argc, argv, 1);
-}
-#endif
-
 static ERL_NIF_TERM element_to_binary(ErlNifEnv* env, int argc,
 				      const ERL_NIF_TERM argv[])
 {
@@ -300,12 +292,6 @@ static ERL_NIF_TERM element_to_binary(ErlNifEnv* env, int argc,
 
 static ErlNifFunc nif_funcs[] =
   {
-    /* Stupid Erlang bug with enif_make_string() is fixed
-       in R14A only (OTP-8685), so we can't use
-       element_to_string in Erlang < R14A.*/
-#ifdef SSL40
-    {"element_to_string", 1, element_to_string},
-#endif
     {"element_to_binary", 1, element_to_binary}
   };
 
