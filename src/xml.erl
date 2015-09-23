@@ -441,7 +441,7 @@ get_so_path() ->
                           {error, _} ->
                               EbinDir = filename:dirname(code:which(?MODULE)),
                               AppDir = filename:dirname(EbinDir),
-                              filename:join([AppDir, "priv", "lib"]);
+                              filename:join([AppDir, "priv"]);
                           V2 ->
                               V2
                       end;
