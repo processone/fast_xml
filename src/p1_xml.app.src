@@ -23,7 +23,7 @@
 
 {application, p1_xml,
  [{description,  "Fast Expat based Erlang XML parsing library"},
-  {vsn,          "1.1.0-beta1"},
+  {vsn,          "1.1.0"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
