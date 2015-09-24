@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : xml_test.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : XML utils
+%%% Purpose : xml module testing
 %%% Created : 17 Dec 2013 by Evgeny Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
