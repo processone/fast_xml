@@ -25,8 +25,6 @@
 
 -author('alexey@process-one.net').
 
--behaviour(gen_server).
-
 -export([element_to_binary/1, get_so_path/0,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
@@ -36,43 +34,18 @@
 	 append_subtags/2, get_path_s/2,
 	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
 
-%% Internal exports, call-back functions.
--export([start_link/0, init/1, handle_call/3, handle_cast/2,
-	 handle_info/2, code_change/3, terminate/2]).
+-export([load_nif/0]).
 
 -include("xml.hrl").
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [],
-			  []).
-
 %% Replace element_to_binary/1 with NIF
-init([]) ->
+load_nif() ->
     SOPath = filename:join(get_so_path(), "xml"),
     case catch erlang:load_nif(SOPath, 0) of
         ok -> ok;
-        Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err])
-    end,
-    {ok, []}.
-
-%%% --------------------------------------------------------
-%%% The call-back functions.
-%%% --------------------------------------------------------
-
-handle_call(_, _, State) -> {noreply, State}.
-
-handle_cast(_, State) -> {noreply, State}.
-
-handle_info({'EXIT', Port, Reason}, Port) ->
-    {stop, {port_died, Reason}, Port};
-handle_info({'EXIT', _Pid, _Reason}, Port) ->
-    {noreply, Port};
-handle_info(_, State) -> {noreply, State}.
-
-code_change(_OldVsn, State, _Extra) -> {ok, State}.
-
-terminate(_Reason, _State) ->
-    ok.
+        Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err]),
+               {error, unable_to_load_nif}
+    end.
 
 %%
 -spec(element_to_binary/1 ::

@@ -25,14 +25,10 @@
 
 -author('alexey@process-one.net').
 
--behaviour(gen_server).
-
 -export([new/1, new/2, parse/2, close/1,
 	 change_callback_pid/2, parse_element/1]).
 
-%% Internal exports, call-back functions.
--export([start_link/0, init/1, handle_call/3, handle_cast/2,
-	 handle_info/2, code_change/3, terminate/2]).
+-export([load_nif/0]).
 
 -include("xml.hrl").
 
@@ -55,36 +51,16 @@
 
 -export_type([xml_stream_state/0, xml_stream_el/0]).
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [],
-			  []).
-
-init([]) ->
-    case load_dlls() of
-        ok ->
-            {ok, []};
-        {error, Why} ->
-            {stop, Why}
+load_nif() ->
+    NifFile = filename:join([xml:get_so_path(), atom_to_list(xml_stream)]),
+    case erlang:load_nif(NifFile, 0) of
+	ok ->
+	    ok;
+        {error, {Reason, Txt}} ->
+            error_logger:error_msg("failed to load NIF ~s: ~s",
+                                   [NifFile, Txt]),
+            {error, Reason}
     end.
-
-%%% --------------------------------------------------------
-%%% The call-back functions.
-%%% --------------------------------------------------------
-
-handle_call(_, _, State) -> {noreply, State}.
-
-handle_cast(_, State) -> {noreply, State}.
-
-handle_info({'EXIT', Port, Reason}, Port) ->
-    {stop, {port_died, Reason}, Port};
-handle_info({'EXIT', _Pid, _Reason}, Port) ->
-    {noreply, Port};
-handle_info(_, State) -> {noreply, State}.
-
-code_change(_OldVsn, State, _Extra) -> {ok, State}.
-
-terminate(_Reason, _State) ->
-    ok.
 
 -spec new(pid()) -> xml_stream_state().
 
@@ -117,14 +93,3 @@ close(_State) ->
 
 parse_element(_Str) ->
     erlang:nif_error(nif_not_loaded).
-
-load_dlls() ->
-    NifFile = filename:join([xml:get_so_path(), atom_to_list(?MODULE)]),
-    case erlang:load_nif(NifFile, 0) of
-	ok ->
-	    ok;
-        {error, {Reason, Txt}} ->
-            error_logger:error_msg("failed to load NIF ~s: ~s",
-                                   [NifFile, Txt]),
-            {error, Reason}
-    end.
