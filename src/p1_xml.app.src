@@ -23,7 +23,7 @@
 
 {application, p1_xml,
  [{description,  "Fast Expat based Erlang XML parsing library"},
-  {vsn,          "1.1.0-beta1"},
+  {vsn,          "1.1.0"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
@@ -31,7 +31,7 @@
 
   %% hex.pm packaging:
   {files, ["src/", "c_src/xml.c", "c_src/xml_stream.c", "include/", "spec/", "rebar.config.script", "README.md", "LICENSE.txt"]},
-  {licenses, ["Apache"]},
+  {licenses, ["Apache 2.0"]},
   {contributors, ["ProcessOne"]},
   {links, [{"Github", "https://github.com/processone/xml"}]}]}.
 

@@ -25,8 +25,6 @@
 
 -author('alexey@process-one.net').
 
--behaviour(gen_server).
-
 -export([element_to_binary/1, get_so_path/0,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
@@ -36,43 +34,18 @@
 	 append_subtags/2, get_path_s/2,
 	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
 
-%% Internal exports, call-back functions.
--export([start_link/0, init/1, handle_call/3, handle_cast/2,
-	 handle_info/2, code_change/3, terminate/2]).
+-export([load_nif/0]).
 
 -include("xml.hrl").
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [],
-			  []).
-
 %% Replace element_to_binary/1 with NIF
-init([]) ->
+load_nif() ->
     SOPath = filename:join(get_so_path(), "xml"),
     case catch erlang:load_nif(SOPath, 0) of
         ok -> ok;
-        Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err])
-    end,
-    {ok, []}.
-
-%%% --------------------------------------------------------
-%%% The call-back functions.
-%%% --------------------------------------------------------
-
-handle_call(_, _, State) -> {noreply, State}.
-
-handle_cast(_, State) -> {noreply, State}.
-
-handle_info({'EXIT', Port, Reason}, Port) ->
-    {stop, {port_died, Reason}, Port};
-handle_info({'EXIT', _Pid, _Reason}, Port) ->
-    {noreply, Port};
-handle_info(_, State) -> {noreply, State}.
-
-code_change(_OldVsn, State, _Extra) -> {ok, State}.
-
-terminate(_Reason, _State) ->
-    ok.
+        Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err]),
+               {error, unable_to_load_nif}
+    end.
 
 %%
 -spec(element_to_binary/1 ::
@@ -81,46 +54,8 @@ terminate(_Reason, _State) ->
     -> binary()
 ).
 
-element_to_binary(El) ->
-    iolist_to_binary(element_to_string(El)).
-
-%%
--spec(element_to_string/1 ::
-(
-  El :: xmlel() | cdata())
-    -> string()
-).
-
-element_to_string(El) ->
-    case catch element_to_string_nocatch(El) of
-      {'EXIT', Reason} -> erlang:error({badxml, El, Reason});
-      Result -> Result
-    end.
-
--spec(element_to_string_nocatch/1 ::
-(
-  El :: xmlel() | cdata())
-    -> iolist()
-).
-
-element_to_string_nocatch(El) ->
-    case El of
-      #xmlel{name = Name, attrs = Attrs, children = Els} ->
-	  if Els /= [] ->
-		 [$<, Name, attrs_to_list(Attrs), $>,
-		  [element_to_string_nocatch(E) || E <- Els], $<, $/,
-		  Name, $>];
-	     true -> [$<, Name, attrs_to_list(Attrs), $/, $>]
-	  end;
-      %% We do not crypt CDATA binary, but we enclose it in XML CDATA
-      {xmlcdata, CData} ->
-	  crypt(CData)
-    end.
-
-attrs_to_list(Attrs) -> [attr_to_list(A) || A <- Attrs].
-
-attr_to_list({Name, Value}) ->
-    [$\s, Name, $=, $', crypt(Value), $'].
+element_to_binary(_El) ->
+    erlang:nif_error(nif_not_loaded).
 
 crypt(S) ->
     << <<(case C of
@@ -475,7 +410,14 @@ get_so_path() ->
                   {error, _} ->
                       %% code:priv is looking for a directory with Name and optional version in path
                       %% Search for p1_xml will fail if we are using xml as directory name:
-                      code:priv_dir(xml);
+                      case code:priv_dir(xml) of
+                          {error, _} ->
+                              EbinDir = filename:dirname(code:which(?MODULE)),
+                              AppDir = filename:dirname(EbinDir),
+                              filename:join([AppDir, "priv"]);
+                          V2 ->
+                              V2
+                      end;
                   V ->
                       V
               end,

@@ -49,11 +49,13 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    case xml_sup:start_link() of
-        {ok, Pid} ->
-            {ok, Pid};
-        Error ->
-            Error
+    case {xml:load_nif(), xml_stream:load_nif()} of
+        {ok, ok} ->
+            xml_sup:start_link();
+        {{error,_} = E1, _} ->
+            E1;
+        {_, {error,_} = E2} ->
+            E2
     end.
 
 %%--------------------------------------------------------------------

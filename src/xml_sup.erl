@@ -65,11 +65,7 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    XML = {xml, {xml, start_link, []},
-           permanent, brutal_kill, worker, [xml]},
-    XMLStream = {xml_stream, {xml_stream, start_link, []},
-                 permanent, brutal_kill, worker, [xml_stream]},
-    {ok, {{one_for_one, 10, 1}, [XML, XMLStream]}}.
+    {ok, {{one_for_one, 10, 1}, []}}.
 
 %%%===================================================================
 %%% Internal functions
