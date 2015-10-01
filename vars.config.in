@@ -1,7 +1,0 @@
-{cflags, "@EXPAT_CFLAGS@"}.
-{ldflags, "@EXPAT_LDFLAGS@ @EXPAT_LIBS@"}.
-
-%% Local Variables:
-%% mode: erlang
-%% End:
-%% vim: set filetype=erlang tabstop=8:
