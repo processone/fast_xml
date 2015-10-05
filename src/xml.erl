@@ -25,7 +25,7 @@
 
 -author('alexey@process-one.net').
 
--export([element_to_binary/1, get_so_path/0,
+-export([element_to_binary/1, get_so_path/2,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
@@ -40,7 +40,7 @@
 
 %% Replace element_to_binary/1 with NIF
 load_nif() ->
-    SOPath = filename:join(get_so_path(), "xml"),
+    SOPath = get_so_path([p1_xml, xml], "xml"),
     case catch erlang:load_nif(SOPath, 0) of
         ok -> ok;
         Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err]),
@@ -405,20 +405,43 @@ to_xmlel({_, Name, Attrs, Els}) ->
 to_xmlel({xmlcdata, CData}) ->
     {xmlcdata, iolist_to_binary(CData)}.
 
-get_so_path() ->
-    PrivDir = case code:priv_dir(p1_xml) of
-                  {error, _} ->
-                      %% code:priv is looking for a directory with Name and optional version in path
-                      %% Search for p1_xml will fail if we are using xml as directory name:
-                      case code:priv_dir(xml) of
-                          {error, _} ->
-                              EbinDir = filename:dirname(code:which(?MODULE)),
-                              AppDir = filename:dirname(EbinDir),
-                              filename:join([AppDir, "priv"]);
-                          V2 ->
-                              V2
-                      end;
-                  V ->
-                      V
-              end,
-    filename:join([PrivDir, "lib"]).
+first_match(_Fun, []) ->
+    none;
+first_match(Fun, [H|T]) ->
+    case Fun(H) of
+        none ->
+            first_match(Fun, T);
+        V  ->
+            V
+    end.
+
+
+get_so_path(AppNames, SoName) ->
+    PrivDir = first_match(fun(App) ->
+                                  case code:priv_dir(App) of
+                                      {error, _} -> none;
+                                      V -> V
+                                  end
+                          end, AppNames),
+    case PrivDir of
+        none ->
+            Ext = case os:type() of
+                      {win32, _} -> ".dll";
+                      _ -> ".so"
+                  end,
+            SoFName = filename:join(["priv", "lib", SoName ++ Ext]),
+            first_match(fun(Path) ->
+                                P = case filename:basename(Path) of
+                                        ebin -> filename:dirname(Path);
+                                        _ -> Path
+                                    end,
+                                case filelib:is_file(filename:join([P, SoFName])) of
+                                    true ->
+                                        filename:join([P, "priv", "lib", SoName]);
+                                    _ ->
+                                        none
+                                end
+                        end, code:get_path());
+        V ->
+            filename:join([V, "lib", SoName])
+    end.
