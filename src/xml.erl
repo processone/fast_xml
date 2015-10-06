@@ -430,18 +430,26 @@ get_so_path(AppNames, SoName) ->
                       _ -> ".so"
                   end,
             SoFName = filename:join(["priv", "lib", SoName ++ Ext]),
-            first_match(fun(Path) ->
-                                P = case filename:basename(Path) of
-                                        ebin -> filename:dirname(Path);
-                                        _ -> Path
-                                    end,
-                                case filelib:is_file(filename:join([P, SoFName])) of
-                                    true ->
-                                        filename:join([P, "priv", "lib", SoName]);
+            LPath = first_match(fun(Path) ->
+                                        P = case filename:basename(Path) of
+                                                ebin -> filename:dirname(Path);
+                                                _ -> Path
+                                            end,
+                                        case filelib:is_file(filename:join([P, SoFName])) of
+                                            true ->
+                                                filename:join([P, "priv", "lib", SoName]);
                                     _ ->
-                                        none
-                                end
-                        end, code:get_path());
+                                                none
+                                        end
+                                end, code:get_path()),
+            case LPath of
+                none ->
+                    EbinDir = filename:dirname(code:which(?MODULE)),
+                    AppDir = filename:dirname(EbinDir),
+                    filename:join([AppDir, "priv", SoName]);
+                Val ->
+                    Val
+            end;
         V ->
             filename:join([V, "lib", SoName])
     end.
