@@ -446,7 +446,7 @@ get_so_path(AppNames, SoName) ->
                 none ->
                     EbinDir = filename:dirname(code:which(?MODULE)),
                     AppDir = filename:dirname(EbinDir),
-                    filename:join([AppDir, "priv", SoName]);
+                    filename:join([AppDir, "priv", "lib", SoName]);
                 Val ->
                     Val
             end;
