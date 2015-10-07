@@ -42,9 +42,9 @@ Config = case os:getenv("TRAVIS") of
                  Cfg2 = ModCfg(Cfg1, [deps], fun(V) -> [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}|V] end, []),
                  Cfg3 = ModCfgS(Cfg2, [plugin_dir], "deps/coveralls/src"),
                  Cfg4 = ModCfg(Cfg3, [plugins], fun(V) -> (V -- [rebar3_hex]) ++ [rebar_coveralls] end, []),
-                 Cfg5 = ModCfgS(Cfg4, [coveralls_coverdata], {coveralls_coverdata, ".eunit/cover.coverdata"}),
-                 Cfg6 = ModCfgS(Cfg5, [coveralls_service_job_id], {coveralls_service_job_id, JobId}),
-                 ModCfgS(Cfg6, [coveralls_service_name], {coveralls_service_name, "travis-ci"});
+                 Cfg5 = ModCfgS(Cfg4, [coveralls_coverdata], ".eunit/cover.coverdata"),
+                 Cfg6 = ModCfgS(Cfg5, [coveralls_service_job_id], JobId),
+                 ModCfgS(Cfg6, [coveralls_service_name], "travis-ci");
              _ ->
                  case code:is_loaded(rebar3) of
                      {file, _} ->
