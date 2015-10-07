@@ -36,7 +36,8 @@ Config = [{erl_opts, [debug_info, {src_dirs, ["src"]}]},
 Config2 = case os:getenv("TRAVIS") of
               "true" ->
                   JobId = os:getenv("TRAVIS_JOB_ID"),
-                  C1 = lists:keystore(deps, 1, Config, {deps, [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}]}),
+                  C1 = lists:keystore(deps, 1, Config, {deps, [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}},
+                                                               {p1_utils, ".*", {git, "git://github.com/processone/p1_utils"}}]}),
                   C2 = lists:keystore(plugin_dir, 1, C1, {plugin_dir, "deps/coveralls/src"}),
                   C3 = lists:keystore(plugins, 1, C2, {plugins, [rebar_coveralls]}), %% We do not need rebar3_hex from Travis
                   C4 = lists:keystore(coveralls_coverdata, 1, C3, {coveralls_coverdata, ".eunit/cover.coverdata"}),
