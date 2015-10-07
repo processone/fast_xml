@@ -52,7 +52,7 @@
 -export_type([xml_stream_state/0, xml_stream_el/0]).
 
 load_nif() ->
-    NifFile = xml:get_so_path([p1_xml, xml], "xml_stream"),
+    NifFile = p1_nif_utils:get_so_path(?MODULE, [p1_xml, xml], "xml_stream"),
     case erlang:load_nif(NifFile, 0) of
 	ok ->
 	    ok;
