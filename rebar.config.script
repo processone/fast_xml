@@ -7,12 +7,21 @@
 %%% Created :  8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%-------------------------------------------------------------------
 
+Cfg = case file:consult("vars.config") of
+          {ok, Terms} ->
+              Terms;
+          _Err ->
+              []
+      end ++ [{cflags, "-g -O2 -Wall"}, {ldflags, "-lexpat"}],
+{cflags, CfgCFlags} = lists:keyfind(cflags, 1, Cfg),
+{ldflags, CfgLDFlags} = lists:keyfind(ldflags, 1, Cfg),
+
 NIFPortSpec = [{"priv/lib/xml.so", ["c_src/xml.c"]},
                {"priv/lib/xml_stream.so", ["c_src/xml_stream.c"]}],
 
 Config = [{erl_opts, [debug_info, {src_dirs, ["src"]}]},
-          {port_env, [{"CFLAGS", "$CFLAGS -g -O2 -Wall"},
-                      {"LDFLAGS", "$LDFLAGS -lexpat"}]},
+          {port_env, [{"CFLAGS", "$CFLAGS " ++ CfgCFlags},
+                      {"LDFLAGS", "$LDFLAGS " ++ CfgLDFlags}]},
           {port_specs, NIFPortSpec},
 
           {deps, [{p1_utils, ".*", {git, "git://github.com/processone/p1_utils"}}]},

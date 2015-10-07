@@ -28,15 +28,11 @@ AC_ERLANG_NEED_ERLC
 # AC_ERLANG_SUBST_ROOT_DIR
 # AC_ERLANG_SUBST_LIB_DIR
 
-AC_CHECK_LIB(expat, XML_ParserCreate, [EXPAT_LIB=yes], [], [])
-AC_CHECK_HEADER(expat.h, [EXPAT_HEADER=yes], [], [])
+AC_CHECK_HEADERS([expat.h], [], [
+    AC_MSG_ERROR([libexpat header file expat.h was not found])])
 
-if test "x$EXPAT_LIB" = "x"; then
-   AC_MSG_ERROR([Expat library was not found])
-fi
+AC_SEARCH_LIBS([XML_ParserCreate], [expat], [], [
+    AC_MSG_ERROR([libexpat library was not found])])
 
-if test "x$EXPAT_HEADER" = "x"; then
-   AC_MSG_ERROR([Expat header file "expat.h" was not found])
-fi
-
+AC_CONFIG_FILES([vars.config])
 AC_OUTPUT

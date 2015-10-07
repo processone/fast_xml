@@ -1,0 +1,7 @@
+{cflags, "@CFLAGS@"}.
+{ldflags, "@LDFLAGS@ @LIBS@"}.
+
+%% Local Variables:
+%% mode: erlang
+%% End:
+%% vim: set filetype=erlang tabstop=8:
