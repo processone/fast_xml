@@ -250,29 +250,35 @@ dead_pid_test() ->
     Stream1 = xml_stream:parse(Stream0, "<root><a/></root>"),
     close(Stream1).
 
-huge_element_test() ->
-    Tags = [list_to_binary(["a", integer_to_list(I)])
-	    || I <- lists:seq(1, 100000)],
-    Data = ["<root>", [[$<, Tag, "/>"] || Tag <- Tags], "</root>"],
-    Els = #xmlel{name = <<"root">>,
-		 children = [#xmlel{name = Tag} || Tag <- Tags]},
-    ?assertEqual(Els, xml_stream:parse_element(Data)).
+huge_element_test_() ->
+    {timeout, 60,
+     fun() ->
+	     Tags = [list_to_binary(["a", integer_to_list(I)])
+		     || I <- lists:seq(1, 100000)],
+	     Data = ["<root>", [[$<, Tag, "/>"] || Tag <- Tags], "</root>"],
+	     Els = #xmlel{name = <<"root">>,
+			  children = [#xmlel{name = Tag} || Tag <- Tags]},
+	     ?assertEqual(Els, xml_stream:parse_element(Data))
+     end}.
 
-many_stream_elements_test() ->
-    CallbackPid = spawn(fun() -> receiver([]) end),
-    Stream0 = new(CallbackPid),
-    Stream1 = xml_stream:parse(Stream0, "<root>"),
-    ?assertEqual([{xmlstreamstart, <<"root">>, []}],
-		 collect_events(CallbackPid)),
-    Stream2 = lists:foldl(
-		fun(I, Stream) ->
-			Tag = list_to_binary(["a", integer_to_list(I)]),
-			NewStream = xml_stream:parse(Stream, [$<, Tag, "/>"]),
-			?assertEqual([{xmlstreamelement, #xmlel{name = Tag}}],
-				     collect_events(CallbackPid)),
-			NewStream
-		end, Stream1, lists:seq(1, 100000)),
-    close(Stream2).
+many_stream_elements_test_() ->
+    {timeout, 60,
+     fun() ->
+	     CallbackPid = spawn(fun() -> receiver([]) end),
+	     Stream0 = new(CallbackPid),
+	     Stream1 = xml_stream:parse(Stream0, "<root>"),
+	     ?assertEqual([{xmlstreamstart, <<"root">>, []}],
+			  collect_events(CallbackPid)),
+	     Stream2 = lists:foldl(
+			 fun(I, Stream) ->
+				 Tag = list_to_binary(["a", integer_to_list(I)]),
+				 NewStream = xml_stream:parse(Stream, [$<, Tag, "/>"]),
+				 ?assertEqual([{xmlstreamelement, #xmlel{name = Tag}}],
+					      collect_events(CallbackPid)),
+				 NewStream
+			 end, Stream1, lists:seq(1, 100000)),
+	     close(Stream2)
+     end}.
 
 billionlaughs_test() ->
     Data =
