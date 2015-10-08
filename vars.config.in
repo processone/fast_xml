@@ -1,5 +1,6 @@
 {cflags, "@CFLAGS@"}.
 {ldflags, "@LDFLAGS@ @LIBS@"}.
+{with_gcov, "@gcov@"}.
 
 %% Local Variables:
 %% mode: erlang

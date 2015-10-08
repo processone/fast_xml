@@ -619,6 +619,7 @@ ac_includes_default="\
 #endif"
 
 ac_subst_vars='LTLIBOBJS
+gcov
 ERLCFLAGS
 ERLC
 ERL
@@ -676,6 +677,7 @@ SHELL'
 ac_subst_files=''
 ac_user_opts='
 enable_option_checking
+enable_gcov
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1304,6 +1306,12 @@ if test -n "$ac_init_help"; then
      short | recursive ) echo "Configuration of xml 0.1.0:";;
    esac
   cat <<\_ACEOF
+
+Optional Features:
+  --disable-option-checking  ignore unrecognized --enable/--with options
+  --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
+  --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --enable-gcov           compile with gcov enabled (default: no)
 
 Some influential environment variables:
   CC          C compiler command
@@ -3818,6 +3826,21 @@ else
 
     as_fn_error $? "libexpat library was not found" "$LINENO" 5
 fi
+
+
+# Check whether --enable-gcov was given.
+if test "${enable_gcov+set}" = set; then :
+  enableval=$enable_gcov; case "${enableval}" in
+  yes) gcov=true ;;
+  no)  gcov=false ;;
+  *) as_fn_error $? "bad value ${enableval} for --enable-gcov" "$LINENO" 5 ;;
+esac
+else
+  gcov=false
+fi
+
+
+
 
 
 ac_config_files="$ac_config_files vars.config"

@@ -1,9 +1,14 @@
 .rebar/
 c_src/*.o
 c_src/*.d
+c_src/*.gcda
+c_src/*.gcno
 config.log
 config.status
 ebin
 priv/
 .eunit
 _build
+vars.config
+rebar
+deps/
