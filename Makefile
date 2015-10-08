@@ -1,7 +1,7 @@
 all: src
 
 src:
-	rebar compile
+	rebar get-deps compile
 
 clean:
 	rebar clean
