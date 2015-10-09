@@ -8,6 +8,7 @@ before_install:
 install:
   - ./configure --enable-gcov
   - rebar get-deps
+  - gcc -v
   - rebar compile -vvv
 
 after_success:
