@@ -46,20 +46,21 @@ Cfg1 = case CfgWithGCov of
        end,
 
 %% When running Travis test, upload test coverage result to coveralls:
+Cfg2 = case code:is_loaded(rebar3) of
+           {file, _} ->
+               Cfg1;
+           false ->
+               ModCfg(Cfg1, [plugins], fun(V) -> V -- [rebar3_hex] end, [])
+       end,
+
 Config = case os:getenv("TRAVIS") of
              "true" ->
                  JobId = os:getenv("TRAVIS_JOB_ID"),
-                 Cfg2 = ModCfg(Cfg1, [deps], fun(V) -> [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}|V] end, []),
-                 Cfg3 = ModCfg(Cfg2, [post_hooks], fun(V) -> V ++ [{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\")]).' > getcover.erl"},
-                                                                   {eunit, "escript ./getcover.erl"}] end, []),
-                 Cfg3;
+                 Cfg3 = ModCfg(Cfg2, [deps], fun(V) -> [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}|V] end, []),
+                 ModCfg(Cfg3, [post_hooks], fun(V) -> V ++ [{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\")]).' > getcover.erl"},
+                                                                   {eunit, "escript ./getcover.erl"}] end, []);
              _ ->
-                 case code:is_loaded(rebar3) of
-                     {file, _} ->
-                         Cfg1;
-                     false ->
-                         ModCfg(Cfg1, [plugins], fun(V) -> V -- [rebar3_hex] end, [])
-                 end
+                 Cfg2
          end,
 
 %%io:format("xml configuration:~n  ~p~n", [Config]),
