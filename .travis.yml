@@ -2,9 +2,6 @@ sudo: false
 
 language: erlang
 
-python:
-  - "3.4"
-
 before_install:
   - pip install --user cpp-coveralls
 
@@ -12,7 +9,7 @@ install:
   - rebar get-deps
 
 after_success:
-  - coveralls --exclude lib --exclude tests --gcov-options '\-lp'
+  - coveralls --verbose --exclude lib --exclude tests --gcov-options '\-lp'
 
 otp_release:
   - 17.1
