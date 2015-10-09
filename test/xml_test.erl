@@ -299,3 +299,362 @@ billionlaughs_test() ->
     Stream1 = xml_stream:parse(Stream0, Data),
     close(Stream1),
     ?assertMatch([{xmlstreamerror, _}], collect_events(CallbackPid)).
+
+element_to_binary_test() ->
+    ?assertEqual(
+       <<"<iq from='hag66@shakespeare.lit/pda' id='ik3vs715' "
+	 "to='coven@chat.shakespeare.lit' type='get'>"
+	 "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>">>,
+       xml:element_to_binary(
+	 #xmlel{name = <<"iq">>,
+		attrs = [{<<"from">>,<<"hag66@shakespeare.lit/pda">>},
+			 {<<"id">>,<<"ik3vs715">>},
+			 {<<"to">>,<<"coven@chat.shakespeare.lit">>},
+			 {<<"type">>,<<"get">>}],
+		children = [#xmlel{name = <<"query">>,
+				   attrs = [{<<"xmlns">>,
+					     <<"http://jabber.org/protocol/disco#info">>}],
+				   children = []}]})).
+
+crypt_test() ->
+    ?assertEqual(
+       <<"a&amp;b&lt;c&gt;d&quot;e&apos;f">>,
+       xml:crypt(<<"a&b<c>d\"e\'f">>)).
+
+remove_cdata_test() ->
+    ?assertEqual(
+       [#xmlel{name = <<"b">>}],
+       xml:remove_cdata(
+	 [{xmlcdata, <<"x">>},
+	  {xmlcdata, <<"y">>},
+	  #xmlel{name = <<"b">>},
+	  {xmlcdata, <<"z">>}])).
+
+remove_subtags_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"root">>,
+	      children = [#xmlel{name = <<"2">>,
+				 attrs = [{<<"n1">>, <<"v1">>}]},
+			  #xmlel{name = <<"1">>,
+				 attrs = [{<<"n1">>, <<"v2">>}]},
+			  #xmlel{name = <<"1">>,
+				 attrs = [{<<"n2">>, <<"v1">>}]},
+			  #xmlel{name = <<"3">>}]},
+       xml:remove_subtags(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   attrs = [{<<"n1">>, <<"v1">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"n1">>, <<"v1">>}]},
+			    #xmlel{name = <<"1">>,
+				   attrs = [{<<"n1">>, <<"v2">>}]},
+			    #xmlel{name = <<"1">>,
+				   attrs = [{<<"n2">>, <<"v1">>}]},
+			    #xmlel{name = <<"1">>,
+				   attrs = [{<<"n1">>, <<"v1">>}]},
+			    #xmlel{name = <<"3">>}]},
+	 <<"1">>, {<<"n1">>, <<"v1">>})).
+
+get_cdata_test() ->
+    ?assertEqual(
+       <<"xyz">>,
+       xml:get_cdata(
+	 [{xmlcdata, <<"x">>},
+	  {xmlcdata, <<"y">>},
+	  #xmlel{name = <<"b">>},
+	  {xmlcdata, <<"z">>}])).
+
+get_tag_cdata_test() ->
+    ?assertEqual(
+       <<"xyz">>,
+       xml:get_tag_cdata(
+	 #xmlel{name = <<"a">>,
+		children = [{xmlcdata, <<"x">>},
+			    {xmlcdata, <<"y">>},
+			    #xmlel{name = <<"b">>},
+			    {xmlcdata, <<"z">>}]})).
+
+get_attr_test() ->
+    ?assertEqual(
+       {value, <<"2">>},
+       xml:get_attr(
+	 <<"y">>,
+	 [{<<"x">>, <<"1">>},
+	  {<<"y">>, <<"2">>},
+	  {<<"z">>, <<"3">>}])).
+
+get_attr_empty_test() ->
+    ?assertEqual(
+       false,
+       xml:get_attr(
+	 <<"a">>,
+	 [{<<"x">>, <<"1">>},
+	  {<<"y">>, <<"2">>},
+	  {<<"z">>, <<"3">>}])).
+
+get_attr_s_test() ->
+    ?assertEqual(
+       <<"2">>,
+       xml:get_attr_s(
+	 <<"y">>,
+	 [{<<"x">>, <<"1">>},
+	  {<<"y">>, <<"2">>},
+	  {<<"z">>, <<"3">>}])).
+
+get_attr_s_empty_test() ->
+    ?assertEqual(
+       <<"">>,
+       xml:get_attr_s(
+	 <<"a">>,
+	 [{<<"x">>, <<"1">>},
+	  {<<"y">>, <<"2">>},
+	  {<<"z">>, <<"3">>}])).
+
+get_tag_attr_test() ->
+    ?assertEqual(
+       {value, <<"2">>},
+       xml:get_tag_attr(
+	 <<"y">>,
+	 #xmlel{name = <<"foo">>,
+		attrs = [{<<"x">>, <<"1">>},
+			 {<<"y">>, <<"2">>},
+			 {<<"z">>, <<"3">>}]})).
+
+get_tag_attr_empty_test() ->
+    ?assertEqual(
+       false,
+       xml:get_tag_attr(
+	 <<"a">>,
+	 #xmlel{name = <<"foo">>,
+		attrs = [{<<"x">>, <<"1">>},
+			 {<<"y">>, <<"2">>},
+			 {<<"z">>, <<"3">>}]})).
+
+get_tag_attr_s_test() ->
+    ?assertEqual(
+       <<"2">>,
+       xml:get_tag_attr_s(
+	 <<"y">>,
+	 #xmlel{name = <<"foo">>,
+		attrs = [{<<"x">>, <<"1">>},
+			 {<<"y">>, <<"2">>},
+			 {<<"z">>, <<"3">>}]})).
+
+get_tag_attr_s_empty_test() ->
+    ?assertEqual(
+       <<"">>,
+       xml:get_tag_attr_s(
+	 <<"a">>,
+	 #xmlel{name = <<"foo">>,
+		attrs = [{<<"x">>, <<"1">>},
+			 {<<"y">>, <<"2">>},
+			 {<<"z">>, <<"3">>}]})).
+
+get_subtag_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"2">>},
+       xml:get_subtag(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>},
+			    #xmlel{name = <<"3">>}]},
+	 <<"2">>)).
+
+get_subtag_false_test() ->
+    ?assertMatch(
+       false,
+       xml:get_subtag(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>},
+			    #xmlel{name = <<"3">>}]},
+	 <<"4">>)).
+
+get_subtags_test() ->
+    ?assertMatch(
+       [#xmlel{name = <<"1">>, attrs = [{<<"a">>, <<"b">>}]},
+	#xmlel{name = <<"1">>, attrs = [{<<"x">>, <<"y">>}]}],
+       xml:get_subtags(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   attrs = [{<<"a">>, <<"b">>}]},
+			    #xmlel{name = <<"2">>},
+			    #xmlel{name = <<"3">>},
+			    #xmlel{name = <<"1">>,
+				   attrs = [{<<"x">>, <<"y">>}]}]},
+	 <<"1">>)).
+
+get_subtags_empty_test() ->
+    ?assertEqual(
+       [],
+       xml:get_subtags(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>},
+			    #xmlel{name = <<"3">>}]},
+	 <<"4">>)).
+
+get_subtag_with_xmlns_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"2">>,
+	      attrs = [{<<"xmlns">>, <<"ns1">>}]},
+       xml:get_subtag_with_xmlns(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"3">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]}]},
+	 <<"2">>, <<"ns1">>)).
+
+get_subtag_with_xmlns_empty_test() ->
+    ?assertMatch(
+       false,
+       xml:get_subtag_with_xmlns(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"3">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]}]},
+	 <<"4">>, <<"ns2">>)).
+
+get_subtags_with_xmlns_test() ->
+    ?assertMatch(
+       [#xmlel{name = <<"2">>,
+	       attrs = [{<<"xmlns">>, <<"ns1">>}],
+	       children = [{xmlcdata, <<"foo">>}]},
+	#xmlel{name = <<"2">>,
+	       attrs = [{<<"xmlns">>, <<"ns1">>}],
+	       children = [{xmlcdata, <<"bar">>}]}],
+       xml:get_subtags_with_xmlns(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"2">>,
+				   children = [{xmlcdata, <<"foo">>}],
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"2">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]},
+			    #xmlel{name = <<"2">>,
+				   children = [{xmlcdata, <<"bar">>}],
+				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
+			    #xmlel{name = <<"3">>,
+				   attrs = [{<<"xmlns">>, <<"ns2">>}]}]},
+	 <<"2">>, <<"ns1">>)).
+
+get_subtag_cdata_test() ->
+    ?assertEqual(
+       <<"ab">>,
+       xml:get_subtag_cdata(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>,
+				   children = [{xmlcdata, <<"a">>},
+					       #xmlel{name = <<"3">>},
+					       {xmlcdata, <<"b">>}]},
+			    #xmlel{name = <<"2">>}]},
+	 <<"1">>)).
+
+get_subtag_cdata_empty_test() ->
+    ?assertEqual(
+       <<"">>,
+       xml:get_subtag_cdata(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"2">>}]},
+	 <<"1">>)).
+
+append_subtags_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"root">>,
+	      children = [#xmlel{name = <<"1">>},
+			  #xmlel{name = <<"2">>},
+			  #xmlel{name = <<"3">>}]},
+       xml:append_subtags(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>}]},
+	 [#xmlel{name = <<"2">>}, #xmlel{name = <<"3">>}])).
+
+get_path_s_tag_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"2">>},
+       xml:get_path_s(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>}]},
+	 [{elem, <<"2">>}])).
+
+get_path_s_empty_tag_test() ->
+    ?assertEqual(
+       <<"">>,
+       xml:get_path_s(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>}]},
+	 [{elem, <<"3">>}])).
+
+get_path_s_attr_test() ->
+    ?assertEqual(
+       <<"v1">>,
+       xml:get_path_s(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"a">>,
+				   children =
+				       [#xmlel{name = <<"a1">>,
+					       attrs = [{<<"x">>, <<"y">>},
+							{<<"n1">>, <<"v1">>}]},
+					#xmlel{name = <<"b">>}]},
+			    #xmlel{name = <<"b">>}]},
+	 [{elem, <<"a">>}, {elem, <<"a1">>}, {attr, <<"n1">>}])).
+
+get_path_s_cdata_test() ->
+    ?assertEqual(
+       <<"d1">>,
+       xml:get_path_s(
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"a">>,
+				   children = [#xmlel{name = <<"a1">>},
+					       {xmlcdata, <<"d1">>}]},
+			    #xmlel{name = <<"b">>}]},
+	 [{elem, <<"a">>}, cdata])).
+
+replace_tag_attr_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"foo">>,
+	      attrs = [{<<"2">>, <<"d">>},
+		       {<<"1">>, <<"a">>},
+		       {<<"2">>, <<"c">>}]},
+       xml:replace_tag_attr(
+	 <<"2">>, <<"d">>,
+	 #xmlel{name = <<"foo">>,
+		attrs = [{<<"1">>, <<"a">>},
+			 {<<"2">>, <<"b">>},
+			 {<<"2">>, <<"c">>}]})).
+
+replace_subtag_test() ->
+    ?assertMatch(
+       #xmlel{name = <<"root">>,
+	      children = [#xmlel{name = <<"2">>, children = []},
+			  #xmlel{name = <<"1">>},
+			  #xmlel{name = <<"2">>,
+				 children = [{xmlcdata, <<"b">>}]}]},
+       xml:replace_subtag(
+	 #xmlel{name = <<"2">>},
+	 #xmlel{name = <<"root">>,
+		children = [#xmlel{name = <<"1">>},
+			    #xmlel{name = <<"2">>,
+				   children = [{xmlcdata, <<"a">>}]},
+			    #xmlel{name = <<"2">>,
+				   children =[{xmlcdata, <<"b">>}]}]})).
+
+to_xmlel_test() ->
+    ?assertEqual(
+       #xmlel{name = <<"foo">>,
+	      attrs = [{<<"a">>, <<"b">>}],
+	      children = [{xmlcdata, <<"xyz">>}]},
+       xml:to_xmlel({xmlelement, "foo", [{"a", "b"}], [{xmlcdata, "xyz"}]})).
