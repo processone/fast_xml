@@ -8,6 +8,7 @@ before_install:
 install:
   - ./configure --enable-gcov
   - rebar get-deps
+  - rebar compile -vvv
 
 after_success:
   - coveralls --exclude lib --exclude tests --gcov-options '\-lp' --dump c.json
