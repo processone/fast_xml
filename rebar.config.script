@@ -39,7 +39,7 @@ Cfg1 = case CfgWithGCov of
            "true" ->
                V1 = ModCfg(Cfg00, [post_hooks], fun(V) -> V ++ [{eunit, "gcov c_src/xml c_src/xml_stream"},
                                                                 {eunit, "mv *.gcov .eunit/"}] end, []),
-               V2 = ModCfg(V1, [port_env, "LDFLAGS"], fun(V) -> V ++ " -fprofile-arcs" end, ""),
+               V2 = ModCfg(V1, [port_env, "LDFLAGS"], fun(V) -> V ++ " -lgcov -fprofile-arcs" end, ""),
                ModCfg(V2, [port_env, "CFLAGS"], fun(V) -> V ++ " -ftest-coverage -fprofile-arcs" end, "");
            _ ->
                Cfg00
