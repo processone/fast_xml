@@ -15,7 +15,8 @@ Erlang XML parser can be build as follow:
 
     ./configure && make
 
-Erlang XML parser is a rebar-compatible OTP application. Alternatively, you can build it with rebar:
+Erlang XML parser is a rebar-compatible OTP
+application. Alternatively, you can build it with rebar:
 
     rebar compile
 
@@ -67,7 +68,20 @@ ok
 
 ## XML Stream parsing example
 
-You can also parse continuous stream. Here is an example XML stream parsing:
+You can also parse continuous stream. Our design allows decoupling
+very easily the process receiving the raw XML to parse from the
+process receiving the parsed content.
+
+The workflow is as follow:
+
+    state = new(CallbackPID); parse(state, data); parse(state, moredata); ...
+
+and the parsed XML fragments (stanzas) are send to CallbackPID.
+
+With that approach you can be very flexible on how you architect your
+own application.
+
+Here is an example XML stream parsing:
 
 ```
 $ erl -pa ebin 
