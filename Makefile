@@ -11,7 +11,6 @@ test: all
 
 # We assume Elixir and Quviq Quickcheck are installed
 exunit:
-	MIX_EXS=test/elixir/mix.exs mix do deps.get, compile
 	MIX_EXS=test/elixir/mix.exs mix test
 
 check-syntax:
