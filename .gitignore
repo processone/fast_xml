@@ -12,3 +12,7 @@ _build
 vars.config
 rebar
 deps/
+
+*.eqc
+.eqc-info
+mix.lock
