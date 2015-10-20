@@ -72,7 +72,7 @@ static void destroy_buf(ErlNifEnv* env, struct buf *rbuf)
   };
 }
 
-inline void resize_buf(ErlNifEnv* env, struct buf *rbuf, int len_to_add)
+static void resize_buf(ErlNifEnv* env, struct buf *rbuf, int len_to_add)
 {
   int new_len = rbuf->len + len_to_add;
   
