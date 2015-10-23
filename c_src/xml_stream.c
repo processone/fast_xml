@@ -28,14 +28,14 @@
 #define ASSERT(x) if (!(x)) return 0
 
 typedef struct attr_t {
-  char *name;
-  char *val;
+  ErlNifBinary name;
+  ErlNifBinary val;
   struct attr_t *next;
 } attr_t;
 
 typedef struct event_t {
   int type;
-  char *data;
+  ErlNifBinary data;
   attr_t *attrs;
   struct event_t *next;
 } event_t;
@@ -48,7 +48,7 @@ typedef struct {
   event_t *events;
   size_t start;
   size_t end;
-  char *root;
+  ErlNifBinary root;
   XML_Parser parser;
   size_t size;
   size_t max_size;
@@ -66,8 +66,7 @@ static attr_t *alloc_attr(attr_t *next_attr)
 {
   attr_t *attr = enif_alloc(sizeof(attr_t));
   ASSERT(attr);
-  attr->name = NULL;
-  attr->val = NULL;
+  memset(attr, 0, sizeof(*attr));
   attr->next = next_attr;
   return attr;
 }
@@ -75,8 +74,8 @@ static attr_t *alloc_attr(attr_t *next_attr)
 static void free_attr(attr_t *attr)
 {
   if (attr) {
-    if (attr->name) enif_free(attr->name);
-    if (attr->val) enif_free(attr->val);
+    if (attr->name.data) enif_release_binary(&attr->name);
+    if (attr->val.data) enif_release_binary(&attr->val);
     enif_free(attr);
   }
 }
@@ -85,8 +84,7 @@ static event_t *alloc_event(event_t *next_event)
 {
   event_t *event = enif_alloc(sizeof(event_t));
   ASSERT(event);
-  event->data = NULL;
-  event->attrs = NULL;
+  memset(event, 0, sizeof(*event));
   event->next = next_event;
   return event;
 }
@@ -94,7 +92,7 @@ static event_t *alloc_event(event_t *next_event)
 static void free_event(event_t *event)
 {
   if (event) {
-    if (event->data) enif_free(event->data);
+    if (event->data.data) enif_release_binary(&event->data);
     while (event->attrs) {
       attr_t *attr = event->attrs;
       event->attrs = attr->next;
@@ -104,7 +102,7 @@ static void free_event(event_t *event)
   }
 }
 
-int encode_name(const char *name, char **buf)
+int encode_name(const char *name, ErlNifBinary *buf)
 {
   char *attr_start;
   char *prefix_start;
@@ -113,22 +111,21 @@ int encode_name(const char *name, char **buf)
     if ((prefix_start = strchr(attr_start+1, '\n'))) {
       size_t attr_size = prefix_start - attr_start;
       size_t prefix_size = strlen(prefix_start) - 1;
-      size_t buf_size = attr_size + prefix_size + 1;
+      size_t buf_size = attr_size + prefix_size;
       attr_start[attr_size] = 0;
-      *buf = enif_alloc(buf_size);
-      ASSERT(*buf);
-      strcpy(*buf, prefix_start+1);
-      (*buf)[prefix_size] = ':';
-      strcpy(*buf + prefix_size + 1, attr_start+1);
+      ASSERT(enif_alloc_binary(buf_size, buf));
+      memcpy(buf->data, prefix_start+1, prefix_size);
+      buf->data[prefix_size] = ':';
+      memcpy(buf->data+prefix_size+1, attr_start+1, attr_size-1);
     } else {
-      *buf = enif_alloc(strlen(attr_start));
-      ASSERT(*buf);
-      strcpy(*buf, attr_start+1);
+      int len = strlen(attr_start) - 1;
+      ASSERT(enif_alloc_binary(len, buf));
+      memcpy(buf->data, attr_start + 1, len);
     };
   } else {
-    *buf = enif_alloc(strlen(name) + 1);
-    ASSERT(*buf);
-    strcpy(*buf, name);
+    int len = strlen(name);
+    ASSERT(enif_alloc_binary(len, buf));
+    memcpy(buf->data, name, len);
   }
 
   return 1;
@@ -153,7 +150,7 @@ static ERL_NIF_TERM attrs2list(ErlNifEnv *env, attr_t *attr)
   ERL_NIF_TERM list = enif_make_list(env, 0);
 
   while (attr) {
-    el = enif_make_tuple2(env, str2bin(env, attr->name), str2bin(env, attr->val));
+    el = enif_make_tuple2(env, enif_make_binary(env, &attr->name), enif_make_binary(env, &attr->val));
     list = enif_make_list_cell(env, el, list);
     attr = attr->next;
   }
@@ -164,7 +161,7 @@ static ERL_NIF_TERM attrs2list(ErlNifEnv *env, attr_t *attr)
 static ERL_NIF_TERM process_events(ErlNifEnv *env, event_t **events, int is_root)
 {
   event_t *event;
-  ERL_NIF_TERM name, el, children, tail;
+  ERL_NIF_TERM el, children, tail;
   ERL_NIF_TERM els = enif_make_list(env, 0);
 
   while (*events) {
@@ -176,15 +173,15 @@ static ERL_NIF_TERM process_events(ErlNifEnv *env, event_t **events, int is_root
       children = process_events(env, events, 0);
       event = *events;
       if (event) {
-	name = str2bin(env, event->data);
 	el = enif_make_tuple4(env, enif_make_atom(env, "xmlel"),
-			      name, attrs2list(env, event->attrs), children);
+			      enif_make_binary(env, &event->data),
+			      attrs2list(env, event->attrs), children);
 	els = enif_make_list_cell(env, el, els);
       }
       break;
     case XML_CDATA:
       el = enif_make_tuple2(env, enif_make_atom(env, "xmlcdata"),
-			    str2bin(env, event->data));
+			    enif_make_binary(env, &event->data));
       els = enif_make_list_cell(env, el, els);
       break;
     case XML_START:
@@ -212,7 +209,7 @@ static void send_event(state_t *state, ERL_NIF_TERM el)
   enif_send(state->env, state->pid, state->send_env,
 	    enif_make_tuple2(state->send_env,
 			     enif_make_atom(state->send_env, "$gen_event"),
-			     enif_make_copy(state->send_env, el)));
+			     el));
   enif_clear_env(state->send_env);
 }
 
@@ -222,7 +219,7 @@ static void send_all_state_event(state_t *state, ERL_NIF_TERM el)
   enif_send(state->env, state->pid, state->send_env,
 	    enif_make_tuple2(state->send_env,
 			     enif_make_atom(state->send_env, "$gen_all_state_event"),
-			     enif_make_copy(state->send_env, el)));
+			     el));
   enif_clear_env(state->send_env);
 }
 
@@ -238,9 +235,9 @@ void *erlXML_StartElementHandler(state_t *state,
     attr = alloc_attr(attr);
     ASSERT(attr);
     ASSERT(encode_name(atts[i], &attr->name));
-    attr->val = enif_alloc(strlen(atts[i+1]) + 1);
-    ASSERT(attr->val);
-    strcpy(attr->val, atts[i+1]);
+    int len = strlen(atts[i+1]);
+    ASSERT(enif_alloc_binary(len, &attr->val));
+    memcpy(attr->val.data, atts[i+1], len);
     i += 2;
   }
 
@@ -248,16 +245,17 @@ void *erlXML_StartElementHandler(state_t *state,
   ASSERT(event);
   event->type = XML_START;
   event->attrs = attr;
+
   ASSERT(encode_name(name, &event->data));
 
-  if (state->pid && !state->root) {
-    state->root = event->data;
+  if (state->pid && !state->root.data) {
+    enif_alloc_binary(event->data.size, &state->root);
+    memcpy(state->root.data, event->data.data, event->data.size);
     send_event(state,
-	       enif_make_tuple3(state->env,
-				enif_make_atom(state->env, "xmlstreamstart"),
-				str2bin(state->env, event->data),
-				attrs2list(state->env, event->attrs)));
-    event->data = NULL;
+	       enif_make_tuple3(state->send_env,
+				enif_make_atom(state->send_env, "xmlstreamstart"),
+				enif_make_binary(state->send_env, &event->data),
+				attrs2list(state->send_env, event->attrs)));
     free_event(event);
   } else {
     state->events = event;
@@ -270,26 +268,22 @@ void *erlXML_StartElementHandler(state_t *state,
 void *erlXML_CharacterDataHandler(state_t *state, const XML_Char *s, int len)
 {
   if (state->pid && !state->start) {
-    char *cdata = enif_alloc(len + 1);
-    ASSERT(cdata);
-    memcpy(cdata, s, len);
-    cdata[len] = 0;
+    ErlNifBinary cdata;
+    ASSERT(enif_alloc_binary(len, &cdata));
+    memcpy(cdata.data, s, len);
     send_all_state_event(state,
-			 enif_make_tuple2(state->env,
-					  enif_make_atom(state->env, "xmlstreamcdata"),
-					  str2bin(state->env, cdata)));
-    enif_free(cdata);
+			 enif_make_tuple2(state->send_env,
+					  enif_make_atom(state->send_env, "xmlstreamcdata"),
+					  enif_make_binary(state->send_env, &cdata)));
     return NULL;
   }
 
   if (state->events) {
     event_t *event = state->events;
     if (event->type == XML_CDATA) {
-      size_t size = strlen(event->data);
-      event->data = enif_realloc(event->data, size + len + 1);
-      ASSERT(event->data);
-      memcpy(event->data + size, s, len);
-      event->data[size + len] = 0;
+      size_t size = event->data.size;
+      ASSERT(enif_realloc_binary(&event->data, size + len));
+      memcpy(event->data.data + size, s, len);
       return NULL;
     }
   }
@@ -297,10 +291,8 @@ void *erlXML_CharacterDataHandler(state_t *state, const XML_Char *s, int len)
   event_t *event = alloc_event(state->events);
   ASSERT(event);
   event->type = XML_CDATA;
-  event->data = enif_alloc(len + 1);
-  ASSERT(event->data);
-  memcpy(event->data, s, len);
-  event->data[len] = 0;
+  ASSERT(enif_alloc_binary(len, &event->data));
+  memcpy(event->data.data, s, len);
 
   state->events = event;
 
@@ -315,9 +307,9 @@ void *erlXML_EndElementHandler(state_t *state, const XML_Char *name)
 
   if (state->pid && !state->start) {
     send_event(state,
-	       enif_make_tuple2(state->env,
-				enif_make_atom(state->env, "xmlstreamend"),
-				str2bin(state->env, state->root)));
+	       enif_make_tuple2(state->send_env,
+				enif_make_atom(state->send_env, "xmlstreamend"),
+				enif_make_binary(state->send_env, &state->root)));
     free_event(event);
     return NULL;
   }
@@ -328,10 +320,10 @@ void *erlXML_EndElementHandler(state_t *state, const XML_Char *name)
   if (state->pid && state->start == state->end) {
     state->start = 0;
     state->end = 0;
-    ERL_NIF_TERM el = process_events(state->env, &state->events, 1);
+    ERL_NIF_TERM el = process_events(state->send_env, &state->events, 1);
     send_event(state,
-	       enif_make_tuple2(state->env,
-				enif_make_atom(state->env, "xmlstreamelement"),
+	       enif_make_tuple2(state->send_env,
+				enif_make_atom(state->send_env, "xmlstreamelement"),
 				el));
   }
 
@@ -356,19 +348,18 @@ void *erlXML_StartNamespaceDeclHandler(state_t *state,
   ASSERT(attr);
 
   if (prefix) {
-    attr->name = enif_alloc(strlen(prefix) + 7);
-    ASSERT(attr->name);
-    memcpy(attr->name, "xmlns:", 6);
-    strcpy(attr->name + 6, prefix);
+    int len = strlen(prefix);
+    ASSERT(enif_alloc_binary(len + 6, &attr->name));
+    memcpy(attr->name.data, "xmlns:", 6);
+    memcpy(attr->name.data + 6, prefix, len);
   } else {
-    attr->name = enif_alloc(6);
-    ASSERT(attr->name);
-    strcpy(attr->name, "xmlns");
+    ASSERT(enif_alloc_binary(5, &attr->name));
+    memcpy(attr->name.data, "xmlns", 5);
   };
 
-  attr->val = enif_alloc(strlen(uri) + 1);
-  ASSERT(attr->val);
-  strcpy(attr->val, uri);
+  int len = strlen(uri);
+  ASSERT(enif_alloc_binary(len, &attr->val));
+  memcpy(attr->val.data, uri, len);
 
   state->xmlns_attrs = attr;
 
@@ -409,7 +400,7 @@ static void destroy_parser_state(ErlNifEnv *env, void *data)
     if (state->parser) XML_ParserFree(state->parser);
     if (state->pid) enif_free(state->pid);
     if (state->send_env) enif_free_env(state->send_env);
-    if (state->root) enif_free(state->root);
+    if (state->root.data) enif_release_binary(&state->root);
     while (state->xmlns_attrs) {
       attr_t *attr = state->xmlns_attrs;
       state->xmlns_attrs = attr->next;
@@ -529,16 +520,16 @@ static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
 
   if (state->size >= state->max_size) {
     send_event(state,
-	       enif_make_tuple2(env,
-				enif_make_atom(env, "xmlstreamerror"),
-				str2bin(env, "XML stanza is too big")));
+	       enif_make_tuple2(state->send_env,
+				enif_make_atom(state->send_env, "xmlstreamerror"),
+				str2bin(state->send_env, "XML stanza is too big")));
   } else {
     int res = XML_Parse(state->parser, (char *)bin.data, bin.size, 0);
     if (!res)
       send_event(state,
-		 enif_make_tuple2(env,
-				  enif_make_atom(env, "xmlstreamerror"),
-				  make_parse_error(env, state->parser)));
+		 enif_make_tuple2(state->send_env,
+				  enif_make_atom(state->send_env, "xmlstreamerror"),
+				  make_parse_error(state->send_env, state->parser)));
   }
 
   return enif_make_resource(env, state);
