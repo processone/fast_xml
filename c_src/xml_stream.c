@@ -472,6 +472,39 @@ static ERL_NIF_TERM make_parse_error(ErlNifEnv *env, XML_Parser parser)
 			  str2bin(env, errstring));
 }
 
+static ERL_NIF_TERM reset_nif(ErlNifEnv* env, int argc,
+			      const ERL_NIF_TERM argv[])
+{
+  state_t *state = NULL;
+
+  if (argc != 1)
+    return enif_make_badarg(env);
+
+  if (!enif_get_resource(env, argv[0], parser_state_t, (void *) &state))
+    return enif_make_badarg(env);
+
+  ASSERT(XML_ParserReset(state->parser, "UTF-8"));
+  setup_parser(state);
+
+  state->size = 0;
+  while (state->xmlns_attrs) {
+    attrs_list_t *c = state->xmlns_attrs;
+    state->xmlns_attrs = c->next;
+    enif_free(c);
+  }
+
+  while (state->elements_stack) {
+    xmlel_stack_t *c = state->elements_stack;
+    state->elements_stack = c->next;
+    enif_free(c);
+  }
+  enif_clear_env(state->send_env);
+  state->depth = 0;
+  state->error = NULL;
+
+  return argv[0];
+}
+
 static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
 				      const ERL_NIF_TERM argv[])
 {
@@ -630,6 +663,7 @@ static ErlNifFunc nif_funcs[] =
     {"new", 2, new_nif},
     {"parse", 2, parse_nif},
     {"parse_element", 1, parse_element_nif},
+    {"reset", 1, reset_nif},
     {"close", 1, close_nif},
     {"change_callback_pid", 2, change_callback_pid_nif}
   };

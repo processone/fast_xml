@@ -25,7 +25,7 @@
 
 -author('alexey@process-one.net').
 
--export([new/1, new/2, parse/2, close/1,
+-export([new/1, new/2, parse/2, close/1, reset/1,
 	 change_callback_pid/2, parse_element/1]).
 
 -export([load_nif/0]).
@@ -70,6 +70,11 @@ new(CallbackPid) ->
 -spec new(pid(), non_neg_integer() | infinity) -> xml_stream_state().
 
 new(_CallbackPid, _MaxSize) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec reset(xml_stream_state()) -> xml_stream_state().
+
+reset(_State) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec change_callback_pid(xml_stream_state(), pid()) -> xml_stream_state().
