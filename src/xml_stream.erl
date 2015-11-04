@@ -82,7 +82,7 @@ reset(_State) ->
 change_callback_pid(_State, _CallbackPid) ->
     erlang:nif_error(nif_not_loaded).
 
--spec parse(xml_stream_state(), iodata()) -> xml_stream_state().
+-spec parse(xml_stream_state(), binary()) -> xml_stream_state().
 
 parse(_State, _Data) ->
     erlang:nif_error(nif_not_loaded).
@@ -92,7 +92,7 @@ parse(_State, _Data) ->
 close(_State) ->
     erlang:nif_error(nif_not_loaded).
 
--spec parse_element(iodata()) -> xmlel() |
+-spec parse_element(binary()) -> xmlel() |
                                  {error, parse_error} |
                                  {error, binary()}.
 
