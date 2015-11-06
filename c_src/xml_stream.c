@@ -392,6 +392,26 @@ void erlXML_DefaultHandler(state_t *state, const XML_Char *s, int len)
   return;
 }
 
+static void free_parser_allocated_structs(state_t *state) {
+  while (state->xmlns_attrs) {
+    attrs_list_t *c = state->xmlns_attrs;
+    state->xmlns_attrs = c->next;
+    enif_free(c);
+  }
+  while (state->elements_stack) {
+    xmlel_stack_t *c = state->elements_stack;
+    while (c->children) {
+      children_list_t *cc = c->children;
+      if (cc->is_cdata)
+        enif_release_binary(&cc->cdata);
+      c->children = cc->next;
+      enif_free(cc);
+    }
+    state->elements_stack = c->next;
+    enif_free(c);
+  }
+}
+
 static void destroy_parser_state(ErlNifEnv *env, void *data)
 {
   state_t *state = (state_t *) data;
@@ -399,16 +419,9 @@ static void destroy_parser_state(ErlNifEnv *env, void *data)
     if (state->parser) XML_ParserFree(state->parser);
     if (state->pid) enif_free(state->pid);
     if (state->send_env) enif_free_env(state->send_env);
-    while (state->xmlns_attrs) {
-      attrs_list_t *c = state->xmlns_attrs;
-      state->xmlns_attrs = c->next;
-      enif_free(c);
-    }
-    while (state->elements_stack) {
-      xmlel_stack_t *c = state->elements_stack;
-      state->elements_stack = c->next;
-      enif_free(c);
-    }
+
+    free_parser_allocated_structs(state);
+
     memset(state, 0, sizeof(state_t));
   }
 }
@@ -486,19 +499,11 @@ static ERL_NIF_TERM reset_nif(ErlNifEnv* env, int argc,
   ASSERT(XML_ParserReset(state->parser, "UTF-8"));
   setup_parser(state);
 
-  state->size = 0;
-  while (state->xmlns_attrs) {
-    attrs_list_t *c = state->xmlns_attrs;
-    state->xmlns_attrs = c->next;
-    enif_free(c);
-  }
+  free_parser_allocated_structs(state);
 
-  while (state->elements_stack) {
-    xmlel_stack_t *c = state->elements_stack;
-    state->elements_stack = c->next;
-    enif_free(c);
-  }
   enif_clear_env(state->send_env);
+
+  state->size = 0;
   state->depth = 0;
   state->error = NULL;
 
