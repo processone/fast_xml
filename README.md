@@ -145,3 +145,19 @@ library like [exmpp](https://processone.github.io/exmpp/).
 This module is use at large scale for parsing massive XML content in
 [ejabberd](https://www.ejabberd.im) XMPP server project. It is used in
 production in thousands of real life deployments.
+
+## Development
+
+### Test
+
+#### Unit test
+
+You can run eunit test with the command:
+
+    $ rebar eunit
+
+#### Elixir / Quickcheck test 
+
+You can run test written with Elixir / Quickcheck thanks to the mix command:
+
+    MIX_EXS=test/elixir/mix.exs mix test
