@@ -15,39 +15,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import EQC
-import :eqc_gen
 import :erlang, only: [list_to_binary: 1]
 
 defmodule XmlTest do
   use ExUnit.Case
+  use EQC.ExUnit
   require Record
 
+# MR: I do not think this is need as mix is starting p1_xml app automatically
+#  @on_load :nifs
+#
+#  def nifs() do
+#    IO.puts "loading NIFs"
+#    :ok = :xml.load_nif()
+#    :ok = :xml_stream.load_nif()
+#  end
+  
   Record.defrecord :xmlel, Record.extract(:xmlel, from: "include/xml.hrl")
   
-#  test "generator" do
-#    sample(xml_el)
-#  end
-
-  test "Can serialize arbitrary XML packets" do
-    assert :eqc.quickcheck(prop_can_serialize)
-  end
-
-  test "Serialize and parse same XML packet" do
-    assert :eqc.quickcheck(prop_encode_decode)
-  end
-
-  # Properties
-  # ==========
-  
-  def prop_can_serialize do
+  property "Can serialize arbitrary XML packets" do
     forall xml_chunk <- xml_el do
       is_binary(:xml.element_to_binary(xml_chunk))
     end
   end
   
-  # Classical Quickcheck identify pattern:
-  def prop_encode_decode do
+  property "Serialize and parse same XML packet" do
     forall xml_chunk <- xml_el do
       :xml_stream.parse_element(:xml.element_to_binary(xml_chunk)) == xml_chunk
     end
