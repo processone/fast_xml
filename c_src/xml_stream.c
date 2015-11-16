@@ -20,9 +20,6 @@
 #include <stdio.h>
 #include <expat.h>
 
-#define XML_START 0
-#define XML_END   1
-#define XML_CDATA 2
 #define PARSING_NOT_RESUMABLE XML_FALSE
 
 #define ASSERT(x) if (!(x)) return 0
@@ -39,7 +36,8 @@ typedef struct children_list_t {
 } children_list_t;
 
 typedef struct attrs_list_t {
-  ERL_NIF_TERM tuple;
+  ErlNifBinary name;
+  ErlNifBinary value;
   struct attrs_list_t *next;
 } attrs_list_t;
 
@@ -48,6 +46,8 @@ typedef struct xmlel_stack_t {
   ERL_NIF_TERM attrs;
   children_list_t *children;
   struct xmlel_stack_t *next;
+  char *namespace;
+  int redefined_top_prefix;
 } xmlel_stack_t;
 
 
@@ -61,8 +61,19 @@ typedef struct {
   XML_Parser parser;
   xmlel_stack_t *elements_stack;
   attrs_list_t *xmlns_attrs;
+  char *top_ns;
+  char *top_prefix;
   const char *error;
+  int normalize_ns;
 } state_t;
+
+typedef enum xmlns_op {
+  OP_ERROR = 0,
+  OP_REMOVE_PREFIX,
+  OP_REMOVE_XMLNS,
+  OP_REPLACE_XMLNS,
+  OP_NOP
+} xmlns_op;
 
 static XML_Memory_Handling_Suite ms = {
   .malloc_fcn = enif_alloc,
@@ -72,46 +83,137 @@ static XML_Memory_Handling_Suite ms = {
 
 static ErlNifResourceType *parser_state_t = NULL;
 
-static int encode_name(const char *name, ErlNifBinary *buf)
+static int same_str_buf(const char *str, const char *buf, size_t buf_len)
 {
-  char *attr_start;
-  char *prefix_start;
+  if (strlen(str) != buf_len)
+    return 0;
+  return memcmp(str, buf, buf_len) == 0;
+}
 
-  if ((attr_start = strchr(name, '\n'))) {
-    if ((prefix_start = strchr(attr_start+1, '\n'))) {
-      size_t attr_size = prefix_start - attr_start;
-      size_t prefix_size = strlen(prefix_start) - 1;
-      size_t buf_size = attr_size + prefix_size;
-      attr_start[attr_size] = 0;
-      ASSERT(enif_alloc_binary(buf_size, buf));
-      memcpy(buf->data, prefix_start+1, prefix_size);
-      buf->data[prefix_size] = ':';
-      memcpy(buf->data+prefix_size+1, attr_start+1, attr_size-1);
-    } else {
-      int len = strlen(attr_start) - 1;
-      ASSERT(enif_alloc_binary(len, buf));
-      memcpy(buf->data, attr_start + 1, len);
-    };
-  } else {
-    int len = strlen(name);
-    ASSERT(enif_alloc_binary(len, buf));
-    memcpy(buf->data, name, len);
-  }
+static char *dup_buf(const char *buf, size_t buf_len)
+{
+  char *res = enif_alloc(buf_len+1);
+  if (!res)
+    return NULL;
+
+  memcpy(res, buf, buf_len);
+  res[buf_len] = '\0';
+
+  return res;
+}
+
+static int dup_to_bin(ErlNifBinary *bin, const char *buf, size_t buf_len)
+{
+  if (!enif_alloc_binary(buf_len, bin))
+      return 0;
+
+  memcpy(bin->data, buf, buf_len);
 
   return 1;
 }
 
+static ERL_NIF_TERM dup_to_term(ErlNifEnv *env, const char *buf, size_t buf_len)
+{
+  ERL_NIF_TERM term;
+
+  unsigned char *str = enif_make_new_binary(env, buf_len, &term);
+  memcpy(str, buf, buf_len);
+
+  return term;
+}
+
+static xmlns_op encode_name(const char *xml_name, ErlNifBinary *buf, char **res_str,
+                            state_t *state, int top_element)
+{
+  const char *parts[3];
+  int i, idx = 0;
+
+  for (i = 0; ; i++) {
+    if (!xml_name[i] || xml_name[i] == '\n') {
+      parts[idx++] = xml_name + i;
+      if (!xml_name[i])
+        break;
+    }
+    if (idx >= 3)
+      return OP_ERROR;
+  }
+  const char *ns = NULL, *name = NULL, *prefix = NULL;
+  size_t ns_len = 0, name_len = 0, prefix_len = 0;
+
+  if (idx == 1) {
+    name = xml_name;
+    name_len = parts[0] - xml_name;
+  } else {
+    ns = xml_name;
+    ns_len = parts[0] - xml_name;
+    name = parts[0] + 1;
+    name_len = parts[1] - parts[0] - 1;
+    if (idx == 3) {
+      prefix = parts[1] + 1;
+      prefix_len = parts[2] - parts[1] - 1;
+    }
+  }
+
+  int with_prefix = prefix_len && (top_element || !res_str);
+  xmlns_op res = OP_REPLACE_XMLNS;
+
+  if (state->normalize_ns) {
+    if (top_element) {
+      if (prefix_len) {
+        state->top_ns = dup_buf(ns, ns_len);
+        if (!state->top_ns)
+          return OP_ERROR;
+        state->top_prefix = dup_buf(prefix, prefix_len);
+        if (!state->top_prefix)
+          return OP_ERROR;
+      }
+      res = OP_NOP;
+    } else {
+      if (res_str && state->top_ns && prefix_len &&
+          !state->elements_stack->redefined_top_prefix &&
+          same_str_buf(state->top_ns, ns, ns_len) &&
+          same_str_buf(state->top_prefix, prefix, prefix_len)) {
+        res = OP_REMOVE_PREFIX;
+        with_prefix = 1;
+      } else {
+        if (res_str &&
+            same_str_buf(state->elements_stack->namespace, ns, ns_len)) {
+          res = OP_REMOVE_XMLNS;
+          with_prefix = 0;
+        }
+      }
+    }
+  } else
+    res = OP_NOP;
+
+  if (with_prefix) {
+    ASSERT(enif_alloc_binary(name_len + prefix_len + 1, buf));
+    memcpy(buf->data, prefix, prefix_len);
+    buf->data[prefix_len] = ':';
+    memcpy(buf->data + prefix_len + 1, name, name_len);
+  } else {
+    ASSERT(dup_to_bin(buf, name, name_len));
+  }
+
+  if (res_str) {
+    *res_str = top_element ?
+               (prefix_len == 0 ? dup_buf(ns, ns_len) : dup_buf("", 0)) :
+               res == OP_REMOVE_PREFIX ?
+               dup_buf(prefix, prefix_len) :
+               dup_buf(ns, ns_len);
+
+    if (!*res_str) {
+      enif_release_binary(buf);
+      return OP_ERROR;
+    }
+  }
+
+  return res;
+}
+
 static ERL_NIF_TERM str2bin(ErlNifEnv *env, const char *s)
 {
-  ErlNifBinary bin;
-  if (enif_alloc_binary(strlen(s), &bin)) {
-    memcpy(bin.data, s, bin.size);
-    return enif_make_binary(env, &bin);
-  } else {
-    return enif_make_tuple2(env,
-			    enif_make_atom(env, "error"),
-			    enif_make_atom(env, "enomem"));
-  }
+  return dup_to_term(env, s, strlen(s));
 }
 
 static void send_event(state_t *state, ERL_NIF_TERM el)
@@ -139,18 +241,19 @@ void erlXML_StartElementHandler(state_t *state,
                                 const XML_Char **atts)
 {
   int i = 0;
-  ErlNifEnv *env = state->send_env;
+  ErlNifEnv* env = state->send_env;
   ERL_NIF_TERM attrs_term = enif_make_list(env, 0);
   ErlNifBinary name_bin;
+  char *ns = NULL;
 
   if (state->error)
     return;
 
   state->depth++;
 
-  while (atts[i]) {
+  while (atts[i])
     i += 2;
-  }
+
   i -= 2;
 
   while (i >= 0) {
@@ -158,10 +261,11 @@ void erlXML_StartElementHandler(state_t *state,
     ERL_NIF_TERM val;
     unsigned char *val_str;
 
-    PARSER_MEM_ASSERT(encode_name(atts[i], &attr_name));
+    PARSER_MEM_ASSERT(encode_name(atts[i], &attr_name, NULL, state, 0));
 
-    int val_len = strlen(atts[i+1]);
-    PARSER_MEM_ASSERT(val_str = enif_make_new_binary(env, val_len, &val));
+    size_t val_len = strlen(atts[i+1]);
+    val_str = enif_make_new_binary(env, val_len, &val);
+    PARSER_MEM_ASSERT(val_str);
     memcpy(val_str, atts[i+1], val_len);
 
     ERL_NIF_TERM el = enif_make_tuple2(env, enif_make_binary(env, &attr_name), val);
@@ -169,14 +273,70 @@ void erlXML_StartElementHandler(state_t *state,
     i -= 2;
   }
 
+  int redefined_top_prefix = state->depth > 1 ? state->elements_stack->redefined_top_prefix : 0;
+  int xmlns_op =  encode_name(name, &name_bin, state->normalize_ns ? &ns : NULL,
+                              state, state->depth == 1);
+  PARSER_MEM_ASSERT(xmlns_op);
+
+  if (!state->normalize_ns)
+    xmlns_op = OP_NOP;
+
   while (state->xmlns_attrs) {
+    ERL_NIF_TERM tuple = 0;
     attrs_list_t *c = state->xmlns_attrs;
-    attrs_term = enif_make_list_cell(env, c->tuple, attrs_term);
+
+    if (c->name.size == 5) { // xmlns
+      if (xmlns_op == OP_REMOVE_XMLNS) {
+        enif_release_binary(&c->name);
+        enif_release_binary(&c->value);
+        state->xmlns_attrs = c->next;
+        enif_free(c);
+        continue;
+      } else if (xmlns_op == OP_REPLACE_XMLNS) {
+        enif_release_binary(&c->value);
+        tuple = enif_make_tuple2(env, enif_make_binary(env, &c->name),
+                                 dup_to_term(env, ns, strlen(ns)));
+        xmlns_op = OP_NOP;
+      }
+    } else if (xmlns_op == OP_REMOVE_PREFIX &&
+        same_str_buf(ns, (char*)c->name.data + 6, c->name.size - 6)) {
+      enif_release_binary(&c->name);
+      enif_release_binary(&c->value);
+      state->xmlns_attrs = c->next;
+      enif_free(c);
+      continue;
+    } else if (!redefined_top_prefix && state->depth > 1 && state->top_ns &&
+        same_str_buf(state->top_prefix, (char*)c->name.data + 6, c->name.size - 6)) {
+      redefined_top_prefix = 1;
+    }
+
+    if (!tuple) {
+      tuple = enif_make_tuple2(env, enif_make_binary(env, &c->name),
+                               enif_make_binary(env, &c->value));
+    }
+    attrs_term = enif_make_list_cell(env, tuple, attrs_term);
     state->xmlns_attrs = c->next;
     enif_free(c);
   }
+  if (xmlns_op == OP_REPLACE_XMLNS) {
+    ERL_NIF_TERM  tuple = enif_make_tuple2(env, dup_to_term(env, "xmlns", 5),
+                                           dup_to_term(env, ns, strlen(ns)));
+    attrs_term = enif_make_list_cell(env, tuple, attrs_term);
+  } else if (xmlns_op == OP_REMOVE_PREFIX) {
+    enif_free(ns);
+    ns = dup_buf(state->top_ns, strlen(state->top_ns));
+  }
 
-  PARSER_MEM_ASSERT(encode_name(name, &name_bin));
+  xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
+  PARSER_MEM_ASSERT(xmlel);
+
+  xmlel->next = state->elements_stack;
+  xmlel->attrs = attrs_term;
+  xmlel->namespace = ns;
+  xmlel->children = NULL;
+  xmlel->redefined_top_prefix = redefined_top_prefix;
+
+  state->elements_stack = xmlel;
 
   if (state->pid && state->depth == 1) {
     send_event(state,
@@ -185,15 +345,7 @@ void erlXML_StartElementHandler(state_t *state,
 				enif_make_binary(env, &name_bin),
                                 attrs_term));
   } else {
-    xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
-    PARSER_MEM_ASSERT(xmlel);
-
-    xmlel->next = state->elements_stack;
     xmlel->name = enif_make_binary(env, &name_bin);
-    xmlel->attrs = attrs_term;
-    xmlel->children = NULL;
-
-    state->elements_stack = xmlel;
   }
 }
 
@@ -234,7 +386,6 @@ void erlXML_CharacterDataHandler(state_t *state, const XML_Char *s, int len)
     children->is_cdata = 1;
     memcpy(children->cdata.data, s, len);
     children->next = state->elements_stack->children;
-    //fprintf(stderr, "LIST HD %p -> %p\n", children, children->next);
     state->elements_stack->children = children;
   }
 
@@ -276,7 +427,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
   if (state->pid && state->depth == 0) {
     ErlNifBinary name_bin;
 
-    PARSER_MEM_ASSERT(encode_name(name, &name_bin));
+    PARSER_MEM_ASSERT(encode_name(name, &name_bin, NULL, state, 0));
 
     send_event(state,
 	       enif_make_tuple2(env,
@@ -292,7 +443,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
                                 state->elements_stack->attrs,
                                 make_xmlel_children_list(env, state->elements_stack->children));
 
-  if (state->elements_stack->next) {
+  if (!state->pid || state->depth > 1) {
     children_list_t *el;
     xmlel_stack_t *cur_el = state->elements_stack;
 
@@ -303,12 +454,14 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
     el->is_cdata = 0;
     el->term = xmlel_term;
     el->next = state->elements_stack->children;
-    //fprintf(stderr, "LIST HD %p -> %p\n", el, el->next);
     state->elements_stack->children = el;
+    enif_free(cur_el->namespace);
     enif_free(cur_el);
-  } else if (state->pid) {
-    enif_free(state->elements_stack);
-    state->elements_stack = NULL;
+  } else {
+    xmlel_stack_t *cur_el = state->elements_stack;
+    state->elements_stack = cur_el->next;
+    enif_free(cur_el->namespace);
+    enif_free(cur_el);
     send_event(state,
 	       enif_make_tuple2(state->send_env,
 				enif_make_atom(state->send_env, "xmlstreamelement"),
@@ -335,30 +488,35 @@ void erlXML_StartNamespaceDeclHandler(state_t *state,
   if (state->error)
     return;
 
-  ErlNifEnv *env = state->send_env;
-  ERL_NIF_TERM name_term, uri_term;
-  unsigned char *name_str, *uri_str;
-
-  if (prefix) {
-    int len = strlen(prefix);
-
-    PARSER_MEM_ASSERT(name_str = enif_make_new_binary(env, len + 6, &name_term));
-    memcpy(name_str, "xmlns:", 6);
-    memcpy(name_str + 6, prefix, len);
-  } else {
-    PARSER_MEM_ASSERT(name_str = enif_make_new_binary(env, 5, &name_term));
-    memcpy(name_str, "xmlns", 5);
-  };
-
-  int len = strlen(uri);
-  uri_str = enif_make_new_binary(env, len, &uri_term);
-
-  memcpy(uri_str, uri, len);
-
   attrs_list_t *c = enif_alloc(sizeof(attrs_list_t));
   PARSER_MEM_ASSERT(c);
 
-  c->tuple = enif_make_tuple2(env, name_term, uri_term);
+  if (prefix) {
+    size_t len = strlen(prefix);
+
+    if (!enif_alloc_binary(len + 6, &c->name)) {
+      enif_free(c);
+      PARSER_MEM_ASSERT(0);
+    }
+    memcpy(c->name.data, "xmlns:", 6);
+    memcpy(c->name.data + 6, prefix, len);
+  } else {
+    if (!enif_alloc_binary(5, &c->name)) {
+      enif_free(c);
+      PARSER_MEM_ASSERT(0);
+    }
+    memcpy(c->name.data, "xmlns", 5);
+  };
+
+  size_t len = strlen(uri);
+  if (!enif_alloc_binary(len, &c->value)) {
+    enif_release_binary(&c->name);
+    enif_free(c);
+    PARSER_MEM_ASSERT(0);
+  }
+
+  memcpy(c->value.data, uri, len);
+
   c->next = state->xmlns_attrs;
   state->xmlns_attrs = c;
 
@@ -396,6 +554,9 @@ static void free_parser_allocated_structs(state_t *state) {
   while (state->xmlns_attrs) {
     attrs_list_t *c = state->xmlns_attrs;
     state->xmlns_attrs = c->next;
+
+    enif_release_binary(&c->name);
+    enif_release_binary(&c->value);
     enif_free(c);
   }
   while (state->elements_stack) {
@@ -407,9 +568,12 @@ static void free_parser_allocated_structs(state_t *state) {
       c->children = cc->next;
       enif_free(cc);
     }
+    enif_free(c->namespace);
     state->elements_stack = c->next;
     enif_free(c);
   }
+  if (state->top_prefix) enif_free(state->top_prefix);
+  if (state->top_ns) enif_free(state->top_ns);
 }
 
 static void destroy_parser_state(ErlNifEnv *env, void *data)
@@ -473,13 +637,13 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
 
 static ERL_NIF_TERM make_parse_error(ErlNifEnv *env, XML_Parser parser)
 {
-  int errcode = XML_GetErrorCode(parser);
-  char *errstring;
+  enum XML_Error errcode = XML_GetErrorCode(parser);
+  const char *errstring;
 
-  if (errcode == XML_STATUS_SUSPENDED)
+  if (errcode == XML_ERROR_EXTERNAL_ENTITY_HANDLING)
     errstring = "DTDs are not allowed";
   else
-    errstring = (char *)XML_ErrorString(errcode);
+    errstring = XML_ErrorString(errcode);
 
   return enif_make_tuple2(env, enif_make_uint(env, errcode),
 			  str2bin(env, errstring));
@@ -526,11 +690,15 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
   if (!state)
     return enif_make_badarg(env);
 
-  xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
-  if (!xmlel)
-    return enif_make_badarg(env);
-
   state->send_env = env;
+
+  xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
+  if (!xmlel) {
+    enif_release_resource(state);
+    return enif_make_badarg(env);
+  }
+
+  memset(xmlel, 0, sizeof(xmlel_stack_t));
 
   xmlel->next = state->elements_stack;
   xmlel->children = NULL;
@@ -538,7 +706,8 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
   state->elements_stack = xmlel;
 
   int res = XML_Parse(state->parser, (char *)bin.data, bin.size, 1);
-  if (res && state->elements_stack->children && !state->elements_stack->children->is_cdata)
+  if (res == XML_STATUS_OK && state->elements_stack->children &&
+          !state->elements_stack->children->is_cdata)
     el = state->elements_stack->children->term;
   else if (state->error)
     el = enif_make_tuple2(env, enif_make_atom(env, "error"),
@@ -550,6 +719,7 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
   state->send_env = NULL;
 
   enif_release_resource(state);
+
   return el;
 }
 
@@ -648,6 +818,8 @@ static ERL_NIF_TERM new_nif(ErlNifEnv* env, int argc,
   state_t *state = init_parser_state(&pid);
   if (!state)
     return enif_make_badarg(env);
+
+  state->normalize_ns = 1;
 
   ERL_NIF_TERM result = enif_make_resource(env, state);
   enif_release_resource(state);
