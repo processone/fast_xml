@@ -49,6 +49,10 @@ empty_tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
 		 xml_stream:parse_element(<<"<root></root>">>)).
 
+empty_tag_with_ns_test() ->
+    ?assertEqual(#xmlel{name = <<"root">>, attrs = [{<<"xmlns">>, <<"ns">>}]},
+		 xml_stream:parse_element(<<"<root xmlns='ns'></root>">>)).
+
 tag_with_cdata_test() ->
     ?assertEqual(#xmlel{name = <<"root">>,
 			children = [{xmlcdata, <<"cdata">>}]},
@@ -67,6 +71,30 @@ tag_with_prefix_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}]},
 		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'/>">>)).
+
+tag_with_prefix_children1_test() ->
+    ?assertEqual(#xmlel{name = <<"prefix:root">>,
+			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
+			children = [#xmlel{name = <<"prefix:a">>}]},
+		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><prefix:a/></prefix:root>">>)).
+
+tag_with_prefix_children2_test() ->
+    ?assertEqual(#xmlel{name = <<"prefix:root">>,
+			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
+			children = [#xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns2">>}]}]},
+		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns2'/></prefix:root>">>)).
+
+tag_with_prefix_children3_test() ->
+    ?assertEqual(#xmlel{name = <<"prefix:root">>,
+			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
+			children = [#xmlel{name = <<"zed:a">>, attrs=[{<<"xmlns:zed">>, <<"ns2">>}]}]},
+		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><zed:a xmlns:zed='ns2'/></prefix:root>">>)).
+
+tag_with_prefix_children4_test() ->
+    ?assertEqual(#xmlel{name = <<"prefix:root">>,
+			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
+			children = [#xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns">>}]}]},
+		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns'/></prefix:root>">>)).
 
 tag_with_attr_with_prefix_test() ->
     ?assertEqual(#xmlel{name = <<"root">>,
@@ -117,6 +145,34 @@ stream_test() ->
        [{xmlstreamstart, <<"prefix:root">>, [{<<"xmlns:prefix">>, <<"ns">>},
 					     {<<"prefix:r">>, <<"1">>}]},
 	{xmlstreamelement, #xmlel{name = <<"a">>}},
+	{xmlstreamelement, #xmlel{name = <<"b">>,
+				  children = [{xmlcdata, <<"cdata">>}]}},
+	{xmlstreamend, <<"prefix:root">>}],
+       collect_events(CallbackPid)).
+
+stream_normalized_ns_test() ->
+    CallbackPid = spawn_link(fun() -> receiver([]) end),
+    Stream0 = new(CallbackPid),
+    Data = [<<"<prefix:root prefix:r='1' xmlns:t='ns1' xmlns:prefix='ns'>">>,
+	    <<"junk1">>, <<"<a/>">>,
+	     <<"<prefix:n1/>">>, <<"<n2 xmlns='2'/>">>,
+	     <<"<t:n3/>">>, <<"<v:n4 xmlns:v='3'/>">>,
+	     <<"junk2">>, <<"<b>cdata</b>">>,
+            <<"junk3">>, <<"</prefix:root>">>],
+    StreamN = lists:foldl(
+		fun(Chunk, Stream) ->
+			xml_stream:parse(Stream, Chunk)
+		end, Stream0, Data),
+    close(StreamN),
+    ?assertEqual(
+       [{xmlstreamstart, <<"prefix:root">>, [{<<"xmlns:t">>, <<"ns1">>},
+					     {<<"xmlns:prefix">>, <<"ns">>},
+					     {<<"prefix:r">>, <<"1">>}]},
+	{xmlstreamelement, #xmlel{name = <<"a">>}},
+	{xmlstreamelement, #xmlel{name = <<"prefix:n1">>}},
+	{xmlstreamelement, #xmlel{name = <<"n2">>, attrs=[{<<"xmlns">>, <<"2">>}]}},
+	{xmlstreamelement, #xmlel{name = <<"n3">>, attrs=[{<<"xmlns">>, <<"ns1">>}]}},
+	{xmlstreamelement, #xmlel{name = <<"n4">>, attrs=[{<<"xmlns">>, <<"3">>}, {<<"xmlns:v">>, <<"3">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"b">>,
 				  children = [{xmlcdata, <<"cdata">>}]}},
 	{xmlstreamend, <<"prefix:root">>}],
