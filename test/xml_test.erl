@@ -155,8 +155,10 @@ stream_normalized_ns_test() ->
     Stream0 = new(CallbackPid),
     Data = [<<"<prefix:root prefix:r='1' xmlns:t='ns1' xmlns:prefix='ns'>">>,
 	    <<"junk1">>, <<"<a/>">>,
-	     <<"<prefix:n1/>">>, <<"<n2 xmlns='2'/>">>,
+	     <<"<prefix:n1/>">>, <<"<prefix:n1 xmlns:prefix='ns'/>">>,
+             <<"<a xmlns='ns5'><b xmlns='ns5'/></a>">>, <<"<n2 xmlns='2'/>">>,
 	     <<"<t:n3/>">>, <<"<v:n4 xmlns:v='3'/>">>,
+             <<"<prefix:n5 xmlns:prefix='n4'><e1/><prefix:e2/></prefix:n5>">>,
 	     <<"junk2">>, <<"<b>cdata</b>">>,
             <<"junk3">>, <<"</prefix:root>">>],
     StreamN = lists:foldl(
@@ -170,12 +172,42 @@ stream_normalized_ns_test() ->
 					     {<<"prefix:r">>, <<"1">>}]},
 	{xmlstreamelement, #xmlel{name = <<"a">>}},
 	{xmlstreamelement, #xmlel{name = <<"prefix:n1">>}},
+	{xmlstreamelement, #xmlel{name = <<"prefix:n1">>}},
+	{xmlstreamelement, #xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns5">>}],
+                                  children=[#xmlel{name = <<"b">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"n2">>, attrs=[{<<"xmlns">>, <<"2">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"n3">>, attrs=[{<<"xmlns">>, <<"ns1">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"n4">>, attrs=[{<<"xmlns">>, <<"3">>}, {<<"xmlns:v">>, <<"3">>}]}},
+	{xmlstreamelement, #xmlel{name = <<"n5">>, attrs=[{<<"xmlns">>, <<"n4">>}, {<<"xmlns:prefix">>, <<"n4">>}],
+                                  children=[#xmlel{name = <<"e1">>, attrs=[{<<"xmlns">>, <<"">>}]},
+                                            #xmlel{name = <<"e2">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"b">>,
 				  children = [{xmlcdata, <<"cdata">>}]}},
 	{xmlstreamend, <<"prefix:root">>}],
+       collect_events(CallbackPid)).
+
+stream_reset_test() ->
+    CallbackPid = spawn_link(fun() -> receiver([]) end),
+    S0 = new(CallbackPid),
+    S1 = xml_stream:parse(S0, <<"<a xmlns='ns1'><b/>">>),
+    S2 = xml_stream:reset(S1),
+    S3 = xml_stream:parse(S2, <<"<a><b/></a>">>),
+    close(S3),
+    ?assertEqual(
+       [{xmlstreamstart, <<"a">>, [{<<"xmlns">>, <<"ns1">>}]},
+	{xmlstreamelement, #xmlel{name = <<"b">>}},
+        {xmlstreamstart, <<"a">>, []},
+	{xmlstreamelement, #xmlel{name = <<"b">>}},
+	{xmlstreamend, <<"a">>}],
+       collect_events(CallbackPid)).
+stream_error_test() ->
+    CallbackPid = spawn_link(fun() -> receiver([]) end),
+    S0 = new(CallbackPid),
+    S1 = xml_stream:parse(S0, <<"<a><b>a</c>">>),
+    close(S1),
+    ?assertEqual(
+       [{xmlstreamstart, <<"a">>, []},
+	{xmlstreamerror, {7, <<"mismatched tag">>}}],
        collect_events(CallbackPid)).
 
 stream_with_joined_cdata_test() ->
