@@ -176,7 +176,7 @@ stream_normalized_ns_test() ->
 	{xmlstreamelement, #xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns5">>}],
                                   children=[#xmlel{name = <<"b">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"n2">>, attrs=[{<<"xmlns">>, <<"2">>}]}},
-	{xmlstreamelement, #xmlel{name = <<"n3">>, attrs=[{<<"xmlns">>, <<"ns1">>}]}},
+	{xmlstreamelement, #xmlel{name = <<"t:n3">>}},
 	{xmlstreamelement, #xmlel{name = <<"n4">>, attrs=[{<<"xmlns">>, <<"3">>}, {<<"xmlns:v">>, <<"3">>}]}},
 	{xmlstreamelement, #xmlel{name = <<"n5">>, attrs=[{<<"xmlns">>, <<"n4">>}, {<<"xmlns:prefix">>, <<"n4">>}],
                                   children=[#xmlel{name = <<"e1">>, attrs=[{<<"xmlns">>, <<"">>}]},
