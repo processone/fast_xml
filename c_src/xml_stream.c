@@ -101,6 +101,11 @@ static char *dup_buf(const char *buf, size_t buf_len)
   return res;
 }
 
+static char *dup_str(const char *str)
+{
+  return dup_buf(str, strlen(str));
+}
+
 static int dup_to_bin(ErlNifBinary *bin, const char *buf, size_t buf_len)
 {
   if (!enif_alloc_binary(buf_len, bin))
@@ -200,15 +205,18 @@ static xmlns_op encode_name(state_t *state, const char *xml_name, ErlNifBinary *
   }
 
   if (ns_str) {
-    *ns_str = top_element ?
-              (prefix_len == 0 ? dup_buf(ns, ns_len) : dup_buf("", 0)) :
-               res == OP_REMOVE_PREFIX ?
-               dup_buf(prefix, prefix_len) :
-               dup_buf(ns, ns_len);
+    if (top_element && prefix_len > 0)
+      *ns_str = NULL;
+    else {
+      *ns_str = top_element ? dup_buf(ns, ns_len) :
+                res == OP_REMOVE_PREFIX ?
+                dup_str(state->elements_stack->namespace) :
+                dup_buf(ns, ns_len);
 
-    if (!*ns_str) {
-      enif_release_binary(buf);
-      return OP_ERROR;
+      if (!*ns_str) {
+        enif_release_binary(buf);
+        return OP_ERROR;
+      }
     }
     if (pfx_str) {
       if (res == OP_REMOVE_PREFIX) {
@@ -307,6 +315,8 @@ void erlXML_StartElementHandler(state_t *state,
     attrs_list_t *c = state->xmlns_attrs;
     ErlNifBinary new_prefix, new_ns;
 
+    state->xmlns_attrs = c->next;
+
     if (state->depth == 1 && state->normalize_ns && c->name.size > 6) {
       PARSER_MEM_ASSERT(dup_to_bin(&new_prefix, (char*)c->name.data+6, c->name.size-6));
       PARSER_MEM_ASSERT(dup_to_bin(&new_ns, (char*)c->value.data, c->value.size));
@@ -316,7 +326,6 @@ void erlXML_StartElementHandler(state_t *state,
       if (xmlns_op == OP_REMOVE_XMLNS) {
         enif_release_binary(&c->name);
         enif_release_binary(&c->value);
-        state->xmlns_attrs = c->next;
         enif_free(c);
         continue;
       } else if (xmlns_op == OP_REPLACE_XMLNS) {
@@ -325,11 +334,12 @@ void erlXML_StartElementHandler(state_t *state,
                                  dup_to_term(env, ns, strlen(ns)));
         xmlns_op = OP_NOP;
       }
+      if (!ns && state->normalize_ns)
+        PARSER_MEM_ASSERT(ns = dup_buf((char *) c->value.data, c->value.size));
     } else if (xmlns_op == OP_REMOVE_PREFIX &&
         same_str_buf(pfx, (char*)c->name.data + 6, c->name.size - 6)) {
       enif_release_binary(&c->name);
       enif_release_binary(&c->value);
-      state->xmlns_attrs = c->next;
       enif_free(c);
       continue;
     } else if (!redefined_top_prefix && state->depth > 1 && c->name.size > 6 &&
@@ -342,7 +352,6 @@ void erlXML_StartElementHandler(state_t *state,
                                enif_make_binary(env, &c->value));
     }
     attrs_term = enif_make_list_cell(env, tuple, attrs_term);
-    state->xmlns_attrs = c->next;
 
     if (state->depth == 1 && state->normalize_ns && c->name.size > 6) {
       c->name = new_prefix;
@@ -352,6 +361,7 @@ void erlXML_StartElementHandler(state_t *state,
     } else
       enif_free(c);
   }
+
   if (xmlns_op == OP_REPLACE_XMLNS) {
     ERL_NIF_TERM  tuple = enif_make_tuple2(env, dup_to_term(env, "xmlns", 5),
                                            dup_to_term(env, ns, strlen(ns)));
@@ -359,6 +369,9 @@ void erlXML_StartElementHandler(state_t *state,
   } else if (xmlns_op == OP_REMOVE_PREFIX) {
     enif_free(pfx);
   }
+
+  if (!ns && state->normalize_ns)
+    PARSER_MEM_ASSERT(ns = dup_buf("", 0));
 
   xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
   PARSER_MEM_ASSERT(xmlel);
