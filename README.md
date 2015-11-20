@@ -9,6 +9,10 @@ It supports:
 - XML stream parsing: Suitable for large XML document, or infinite
   network XML stream like XMPP.
 
+This module can parse files much faster than built-in module `xmerl`.
+Depending on file complexity and size `xml_stream:parse_element/1` can
+be 8-18 times faster than calling `xmerl_scan:string/2`.
+
 ## Building
 
 Erlang XML parser can be build as follow:
@@ -60,7 +64,7 @@ $ erl -pa ebin
 Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
 Eshell V6.3  (abort with ^G)
-1> application:start(p1_xml). 
+1> application:start(p1_xml).
 ok
 2> xml_stream:parse_element(<<"<test>content cdata</test>">>).
 {xmlel,<<"test">>,[],[{xmlcdata,<<"content cdata">>}]}
@@ -84,13 +88,13 @@ own application.
 Here is an example XML stream parsing:
 
 ```
-$ erl -pa ebin 
+$ erl -pa ebin
 Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
 Eshell V6.3  (abort with ^G)
 
 % Start the application:
-1> application:start(p1_xml). 
+1> application:start(p1_xml).
 ok
 
 % Create a new stream, using self PID to received XML parsing event:
@@ -156,7 +160,7 @@ You can run eunit test with the command:
 
     $ rebar eunit
 
-#### Elixir / Quickcheck test 
+#### Elixir / Quickcheck test
 
 You can run test written with Elixir / Quickcheck thanks to the mix command:
 
