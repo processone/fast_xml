@@ -16,12 +16,12 @@
 # Elixir test can be run from project root using command:
 #     make exunit
 
-defmodule P1Xml.Mixfile do
+defmodule FastXml.Mixfile do
   use Mix.Project
 
   def project do
-    [app: :p1_xml,
-     version: "1.1.0",
+    [app: :fast_xml,
+     version: "1.1.1",
      elixir: "~> 1.1",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -31,7 +31,7 @@ defmodule P1Xml.Mixfile do
 
   def application do
     [applications: [:logger],
-     mod: {:xml_app, []}]
+     mod: {:fxml_app, []}]
   end
   
   defp deps do

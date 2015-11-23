@@ -30,7 +30,7 @@
 
 -export([load_nif/0]).
 
--include("xml.hrl").
+-include("fxml.hrl").
 
 -record(xml_stream_state,
 	{callback_pid = self() :: pid(),

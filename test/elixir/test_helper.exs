@@ -1,2 +1,2 @@
 ExUnit.start()
-# Mix is starting application p1_xml automatically
+# Mix is starting application fast_xml automatically

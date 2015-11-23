@@ -1,8 +1,8 @@
 %%%----------------------------------------------------------------------
-%%% File    : xml.erl
+%%% File    : fxml.hrl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : XML utils
-%%% Created : 4 Apr 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%% Created : 1 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
 %%% Copyright (C) 2002-2015 ProcessOne, SARL. All Rights Reserved.
@@ -21,21 +21,15 @@
 %%%
 %%%----------------------------------------------------------------------
 
-{application, p1_xml,
- [{description,  "Fast Expat based Erlang XML parsing library"},
-  {vsn,          "1.1.1"},
-  {modules,      []},
-  {registered,   []},
-  {applications, [kernel, stdlib]},
-  {mod,          {xml_app,[]}},
+-record(xmlel,
+{
+    name = <<"">> :: binary(),
+    attrs    = [] :: [attr()],
+    children = [] :: [xmlel() | cdata()]
+}).
 
-  %% hex.pm packaging:
-  {files, ["src/", "c_src/xml.c", "c_src/xml_stream.c", "include/", "spec/", "rebar.config", "rebar.config.script", "README.md", "CHANGELOG.md", "LICENSE.txt"]},
-  {licenses, ["Apache 2.0"]},
-  {maintainers, ["ProcessOne"]},
-  {links, [{"Github", "https://github.com/processone/xml"}]}]}.
+-type(cdata() :: {xmlcdata, CData::binary()}).
 
-%% Local Variables:
-%% mode: erlang
-%% End:
-%% vim: set filetype=erlang tabstop=8:
+-type(attr() :: {Name::binary(), Value::binary()}).
+
+-type(xmlel() :: #xmlel{}).

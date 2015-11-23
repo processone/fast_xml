@@ -1,5 +1,5 @@
 %%%----------------------------------------------------------------------
-%%% File    : xml_test.erl
+%%% File    : fxml_test.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : xml module testing
 %%% Created : 17 Dec 2013 by Evgeny Khramtsov <ekhramtsov@process-one.net>
@@ -21,12 +21,12 @@
 %%%
 %%%----------------------------------------------------------------------
 
--module(xml_test).
+-module(fxml_test).
 
 -compile(export_all).
 
 -include_lib("eunit/include/eunit.hrl").
--include("xml.hrl").
+-include("fxml.hrl").
 
 new() ->
     new(self()).
@@ -39,7 +39,7 @@ close(State) ->
     ?assertEqual(true, xml_stream:close(State)).
 
 start_test() ->
-    ?assertEqual(ok, application:start(p1_xml)).
+    ?assertEqual(ok, application:start(fast_xml)).
 
 tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
@@ -401,7 +401,7 @@ element_to_binary_test() ->
        <<"<iq from='hag66@shakespeare.lit/pda' id='ik3vs715' "
 	 "to='coven@chat.shakespeare.lit' type='get'>"
 	 "<query xmlns='http://jabber.org/protocol/disco#info'/></iq>">>,
-       xml:element_to_binary(
+       fxml:element_to_binary(
 	 #xmlel{name = <<"iq">>,
 		attrs = [{<<"from">>,<<"hag66@shakespeare.lit/pda">>},
 			 {<<"id">>,<<"ik3vs715">>},
@@ -415,12 +415,12 @@ element_to_binary_test() ->
 crypt_test() ->
     ?assertEqual(
        <<"a&amp;b&lt;c&gt;d&quot;e&apos;f">>,
-       xml:crypt(<<"a&b<c>d\"e\'f">>)).
+       fxml:crypt(<<"a&b<c>d\"e\'f">>)).
 
 remove_cdata_test() ->
     ?assertEqual(
        [#xmlel{name = <<"b">>}],
-       xml:remove_cdata(
+       fxml:remove_cdata(
 	 [{xmlcdata, <<"x">>},
 	  {xmlcdata, <<"y">>},
 	  #xmlel{name = <<"b">>},
@@ -436,7 +436,7 @@ remove_subtags_test() ->
 			  #xmlel{name = <<"1">>,
 				 attrs = [{<<"n2">>, <<"v1">>}]},
 			  #xmlel{name = <<"3">>}]},
-       xml:remove_subtags(
+       fxml:remove_subtags(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   attrs = [{<<"n1">>, <<"v1">>}]},
@@ -454,7 +454,7 @@ remove_subtags_test() ->
 get_cdata_test() ->
     ?assertEqual(
        <<"xyz">>,
-       xml:get_cdata(
+       fxml:get_cdata(
 	 [{xmlcdata, <<"x">>},
 	  {xmlcdata, <<"y">>},
 	  #xmlel{name = <<"b">>},
@@ -463,7 +463,7 @@ get_cdata_test() ->
 get_tag_cdata_test() ->
     ?assertEqual(
        <<"xyz">>,
-       xml:get_tag_cdata(
+       fxml:get_tag_cdata(
 	 #xmlel{name = <<"a">>,
 		children = [{xmlcdata, <<"x">>},
 			    {xmlcdata, <<"y">>},
@@ -473,7 +473,7 @@ get_tag_cdata_test() ->
 get_attr_test() ->
     ?assertEqual(
        {value, <<"2">>},
-       xml:get_attr(
+       fxml:get_attr(
 	 <<"y">>,
 	 [{<<"x">>, <<"1">>},
 	  {<<"y">>, <<"2">>},
@@ -482,7 +482,7 @@ get_attr_test() ->
 get_attr_empty_test() ->
     ?assertEqual(
        false,
-       xml:get_attr(
+       fxml:get_attr(
 	 <<"a">>,
 	 [{<<"x">>, <<"1">>},
 	  {<<"y">>, <<"2">>},
@@ -491,7 +491,7 @@ get_attr_empty_test() ->
 get_attr_s_test() ->
     ?assertEqual(
        <<"2">>,
-       xml:get_attr_s(
+       fxml:get_attr_s(
 	 <<"y">>,
 	 [{<<"x">>, <<"1">>},
 	  {<<"y">>, <<"2">>},
@@ -500,7 +500,7 @@ get_attr_s_test() ->
 get_attr_s_empty_test() ->
     ?assertEqual(
        <<"">>,
-       xml:get_attr_s(
+       fxml:get_attr_s(
 	 <<"a">>,
 	 [{<<"x">>, <<"1">>},
 	  {<<"y">>, <<"2">>},
@@ -509,7 +509,7 @@ get_attr_s_empty_test() ->
 get_tag_attr_test() ->
     ?assertEqual(
        {value, <<"2">>},
-       xml:get_tag_attr(
+       fxml:get_tag_attr(
 	 <<"y">>,
 	 #xmlel{name = <<"foo">>,
 		attrs = [{<<"x">>, <<"1">>},
@@ -519,7 +519,7 @@ get_tag_attr_test() ->
 get_tag_attr_empty_test() ->
     ?assertEqual(
        false,
-       xml:get_tag_attr(
+       fxml:get_tag_attr(
 	 <<"a">>,
 	 #xmlel{name = <<"foo">>,
 		attrs = [{<<"x">>, <<"1">>},
@@ -529,7 +529,7 @@ get_tag_attr_empty_test() ->
 get_tag_attr_s_test() ->
     ?assertEqual(
        <<"2">>,
-       xml:get_tag_attr_s(
+       fxml:get_tag_attr_s(
 	 <<"y">>,
 	 #xmlel{name = <<"foo">>,
 		attrs = [{<<"x">>, <<"1">>},
@@ -539,7 +539,7 @@ get_tag_attr_s_test() ->
 get_tag_attr_s_empty_test() ->
     ?assertEqual(
        <<"">>,
-       xml:get_tag_attr_s(
+       fxml:get_tag_attr_s(
 	 <<"a">>,
 	 #xmlel{name = <<"foo">>,
 		attrs = [{<<"x">>, <<"1">>},
@@ -549,7 +549,7 @@ get_tag_attr_s_empty_test() ->
 get_subtag_test() ->
     ?assertMatch(
        #xmlel{name = <<"2">>},
-       xml:get_subtag(
+       fxml:get_subtag(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
 			    #xmlel{name = <<"2">>},
@@ -559,7 +559,7 @@ get_subtag_test() ->
 get_subtag_false_test() ->
     ?assertMatch(
        false,
-       xml:get_subtag(
+       fxml:get_subtag(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
 			    #xmlel{name = <<"2">>},
@@ -570,7 +570,7 @@ get_subtags_test() ->
     ?assertMatch(
        [#xmlel{name = <<"1">>, attrs = [{<<"a">>, <<"b">>}]},
 	#xmlel{name = <<"1">>, attrs = [{<<"x">>, <<"y">>}]}],
-       xml:get_subtags(
+       fxml:get_subtags(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   attrs = [{<<"a">>, <<"b">>}]},
@@ -583,7 +583,7 @@ get_subtags_test() ->
 get_subtags_empty_test() ->
     ?assertEqual(
        [],
-       xml:get_subtags(
+       fxml:get_subtags(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
 			    #xmlel{name = <<"2">>},
@@ -594,7 +594,7 @@ get_subtag_with_xmlns_test() ->
     ?assertMatch(
        #xmlel{name = <<"2">>,
 	      attrs = [{<<"xmlns">>, <<"ns1">>}]},
-       xml:get_subtag_with_xmlns(
+       fxml:get_subtag_with_xmlns(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
@@ -609,7 +609,7 @@ get_subtag_with_xmlns_test() ->
 get_subtag_with_xmlns_empty_test() ->
     ?assertMatch(
        false,
-       xml:get_subtag_with_xmlns(
+       fxml:get_subtag_with_xmlns(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
@@ -629,7 +629,7 @@ get_subtags_with_xmlns_test() ->
 	#xmlel{name = <<"2">>,
 	       attrs = [{<<"xmlns">>, <<"ns1">>}],
 	       children = [{xmlcdata, <<"bar">>}]}],
-       xml:get_subtags_with_xmlns(
+       fxml:get_subtags_with_xmlns(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   attrs = [{<<"xmlns">>, <<"ns1">>}]},
@@ -648,7 +648,7 @@ get_subtags_with_xmlns_test() ->
 get_subtag_cdata_test() ->
     ?assertEqual(
        <<"ab">>,
-       xml:get_subtag_cdata(
+       fxml:get_subtag_cdata(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>,
 				   children = [{xmlcdata, <<"a">>},
@@ -660,7 +660,7 @@ get_subtag_cdata_test() ->
 get_subtag_cdata_empty_test() ->
     ?assertEqual(
        <<"">>,
-       xml:get_subtag_cdata(
+       fxml:get_subtag_cdata(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"2">>}]},
 	 <<"1">>)).
@@ -671,7 +671,7 @@ append_subtags_test() ->
 	      children = [#xmlel{name = <<"1">>},
 			  #xmlel{name = <<"2">>},
 			  #xmlel{name = <<"3">>}]},
-       xml:append_subtags(
+       fxml:append_subtags(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>}]},
 	 [#xmlel{name = <<"2">>}, #xmlel{name = <<"3">>}])).
@@ -679,7 +679,7 @@ append_subtags_test() ->
 get_path_s_tag_test() ->
     ?assertMatch(
        #xmlel{name = <<"2">>},
-       xml:get_path_s(
+       fxml:get_path_s(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
 			    #xmlel{name = <<"2">>}]},
@@ -688,7 +688,7 @@ get_path_s_tag_test() ->
 get_path_s_empty_tag_test() ->
     ?assertEqual(
        <<"">>,
-       xml:get_path_s(
+       fxml:get_path_s(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
 			    #xmlel{name = <<"2">>}]},
@@ -697,7 +697,7 @@ get_path_s_empty_tag_test() ->
 get_path_s_attr_test() ->
     ?assertEqual(
        <<"v1">>,
-       xml:get_path_s(
+       fxml:get_path_s(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"a">>,
 				   children =
@@ -711,7 +711,7 @@ get_path_s_attr_test() ->
 get_path_s_cdata_test() ->
     ?assertEqual(
        <<"d1">>,
-       xml:get_path_s(
+       fxml:get_path_s(
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"a">>,
 				   children = [#xmlel{name = <<"a1">>},
@@ -725,7 +725,7 @@ replace_tag_attr_test() ->
 	      attrs = [{<<"2">>, <<"d">>},
 		       {<<"1">>, <<"a">>},
 		       {<<"2">>, <<"c">>}]},
-       xml:replace_tag_attr(
+       fxml:replace_tag_attr(
 	 <<"2">>, <<"d">>,
 	 #xmlel{name = <<"foo">>,
 		attrs = [{<<"1">>, <<"a">>},
@@ -739,7 +739,7 @@ replace_subtag_test() ->
 			  #xmlel{name = <<"1">>},
 			  #xmlel{name = <<"2">>,
 				 children = [{xmlcdata, <<"b">>}]}]},
-       xml:replace_subtag(
+       fxml:replace_subtag(
 	 #xmlel{name = <<"2">>},
 	 #xmlel{name = <<"root">>,
 		children = [#xmlel{name = <<"1">>},
@@ -753,7 +753,7 @@ to_xmlel_test() ->
        #xmlel{name = <<"foo">>,
 	      attrs = [{<<"a">>, <<"b">>}],
 	      children = [{xmlcdata, <<"xyz">>}]},
-       xml:to_xmlel({xmlelement, "foo", [{"a", "b"}], [{xmlcdata, "xyz"}]})).
+       fxml:to_xmlel({xmlelement, "foo", [{"a", "b"}], [{xmlcdata, "xyz"}]})).
 
 rpc_fault_test() ->
     Fault = {xmlel,<<"methodResponse">>,[],
@@ -770,8 +770,8 @@ rpc_fault_test() ->
 		       [{xmlel,<<"string">>,[],
 			 [{xmlcdata,<<"Too many parameters.">>}]}]}]}]}]}]}]},
     Result = {response, {fault, 4, <<"Too many parameters.">>}},
-    ?assertEqual({ok, Result}, p1_xmlrpc:decode(Fault)),
-    ?assertEqual(Fault, p1_xmlrpc:encode(Result)).
+    ?assertEqual({ok, Result}, fxmlrpc:decode(Fault)),
+    ?assertEqual(Fault, fxmlrpc:encode(Result)).
 
 rpc_call_test() ->
     Call = {xmlel,<<"methodCall">>,[],
@@ -833,8 +833,8 @@ rpc_call_test() ->
 	       <<"Hello world!">>,nil,
 	       {array,[1404,<<"Something here">>,1]},
 	       {struct,[{foo,1},{bar,2}]}]},
-    ?assertEqual({ok, Result}, p1_xmlrpc:decode(Call)),
-    ?assertEqual(Call, p1_xmlrpc:encode(Result)).
+    ?assertEqual({ok, Result}, fxmlrpc:decode(Call)),
+    ?assertEqual(Call, fxmlrpc:encode(Result)).
 
 response_test() ->
     Response = {xmlel,<<"methodResponse">>, [],
@@ -844,22 +844,22 @@ response_test() ->
 		      [{xmlel,<<"string">>,[],
 			[{xmlcdata,<<"South Dakota">>}]}]}]}]}]},
     Result = {response,[<<"South Dakota">>]},
-    ?assertEqual({ok, Result}, p1_xmlrpc:decode(Response)),
-    ?assertEqual(Response, p1_xmlrpc:encode(Result)).
+    ?assertEqual({ok, Result}, fxmlrpc:decode(Response)),
+    ?assertEqual(Response, fxmlrpc:encode(Result)).
 
 rpc_empty_call_test() ->
     Call = {xmlel,<<"methodCall">>,[],
 	    [{xmlel,<<"methodName">>,[],
 	      [{xmlcdata,<<"some_method">>}]}]},
     Result = {call, some_method, []},
-    ?assertEqual({ok, Result}, p1_xmlrpc:decode(Call)),
-    ?assertEqual(Call, p1_xmlrpc:encode(Result)).
+    ?assertEqual({ok, Result}, fxmlrpc:decode(Call)),
+    ?assertEqual(Call, fxmlrpc:encode(Result)).
 
 rpc_empty_response_test() ->
     Response = {xmlel,<<"methodResponse">>, [], []},
     Result = {response, []},
-    ?assertEqual({ok, Result}, p1_xmlrpc:decode(Response)),
-    ?assertEqual(Response, p1_xmlrpc:encode(Result)).
+    ?assertEqual({ok, Result}, fxmlrpc:decode(Response)),
+    ?assertEqual(Response, fxmlrpc:encode(Result)).
 
 application_stop_test() ->
-    ?assertEqual(ok, application:stop(p1_xml)).
+    ?assertEqual(ok, application:stop(fast_xml)).

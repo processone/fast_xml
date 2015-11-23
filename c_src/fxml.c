@@ -295,4 +295,4 @@ static ErlNifFunc nif_funcs[] =
     {"element_to_binary", 1, element_to_binary}
   };
 
-ERL_NIF_INIT(xml, nif_funcs, load, NULL, NULL, NULL)
+ERL_NIF_INIT(fxml, nif_funcs, load, NULL, NULL, NULL)

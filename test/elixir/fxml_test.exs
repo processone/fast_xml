@@ -22,26 +22,17 @@ defmodule XmlTest do
   use EQC.ExUnit
   require Record
 
-# MR: I do not think this is need as mix is starting p1_xml app automatically
-#  @on_load :nifs
-#
-#  def nifs() do
-#    IO.puts "loading NIFs"
-#    :ok = :xml.load_nif()
-#    :ok = :xml_stream.load_nif()
-#  end
-  
-  Record.defrecord :xmlel, Record.extract(:xmlel, from: "include/xml.hrl")
+  Record.defrecord :xmlel, Record.extract(:xmlel, from: "include/fxml.hrl")
   
   property "Can serialize arbitrary XML packets" do
     forall xml_chunk <- xml_el do
-      is_binary(:xml.element_to_binary(xml_chunk))
+      is_binary(:fxml.element_to_binary(xml_chunk))
     end
   end
   
   property "Serialize and parse same XML packet" do
     forall xml_chunk <- xml_el do
-      :xml_stream.parse_element(:xml.element_to_binary(xml_chunk)) == xml_chunk
+      :xml_stream.parse_element(:fxml.element_to_binary(xml_chunk)) == xml_chunk
     end
   end
 

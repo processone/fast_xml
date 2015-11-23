@@ -33,7 +33,7 @@
          enc_int/1, enc_enum/1, not_empty/1]).
 
 -include("xml_gen.hrl").
--include("xml.hrl").
+-include("fxml.hrl").
 
 -define(err(F, Args),
 	begin

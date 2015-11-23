@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% File    : p1_xmlrpc.erl
+%%% File    : fxmlrpc.erl
 %%% Author  : Evgeny Khramtsov <ekhramtsov@process-one.net>
 %%% Purpose : XMLRPC encoder/decoder
 %%% Created : 3 Oct 2014 by Evgeny Khramtsov <ekhramtsov@process-one.net>
@@ -20,12 +20,12 @@
 %%% limitations under the License.
 %%%
 %%%-------------------------------------------------------------------
--module(p1_xmlrpc).
+-module(fxmlrpc).
 
 %% API
 -export([decode/1, encode/1]).
 
--include("xml.hrl").
+-include("fxml.hrl").
 
 -type value() :: number() | binary() | boolean() | nil |
 		 {base64, binary()} |

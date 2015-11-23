@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
-%%% File    : xml_sup.erl
+%%% File    : fxml_app.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : XML supervisor
+%%% Purpose : XML application
 %%% Created : 1 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
@@ -21,51 +21,55 @@
 %%%
 %%%----------------------------------------------------------------------
 
--module(xml_sup).
+-module(fxml_app).
 
--behaviour(supervisor).
+-behaviour(application).
 
-%% API
--export([start_link/0]).
-
-%% Supervisor callbacks
--export([init/1]).
-
--define(SERVER, ?MODULE).
+%% Application callbacks
+-export([start/2, stop/1]).
 
 %%%===================================================================
-%%% API functions
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Starts the supervisor
-%%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
-%% @end
-%%--------------------------------------------------------------------
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
-
-%%%===================================================================
-%%% Supervisor callbacks
+%%% Application callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Whenever a supervisor is started using supervisor:start_link/[2,3],
-%% this function is called by the new process to find out about
-%% restart strategy, maximum restart frequency and child
-%% specifications.
+%% This function is called whenever an application is started using
+%% application:start/[1,2], and should start the processes of the
+%% application. If the application is structured according to the OTP
+%% design principles as a supervision tree, this means starting the
+%% top supervisor of the tree.
 %%
-%% @spec init(Args) -> {ok, {SupFlags, [ChildSpec]}} |
-%%                     ignore |
-%%                     {error, Reason}
+%% @spec start(StartType, StartArgs) -> {ok, Pid} |
+%%                                      {ok, Pid, State} |
+%%                                      {error, Reason}
+%%      StartType = normal | {takeover, Node} | {failover, Node}
+%%      StartArgs = term()
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, {{one_for_one, 10, 1}, []}}.
+start(_StartType, _StartArgs) ->
+    case {fxml:load_nif(), xml_stream:load_nif()} of
+        {ok, ok} ->
+            fxml_sup:start_link();
+        {{error,_} = E1, _} ->
+            E1;
+        {_, {error,_} = E2} ->
+            E2
+    end.
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function is called whenever an application has stopped. It
+%% is intended to be the opposite of Module:start/2 and should do
+%% any necessary cleaning up. The return value is ignored.
+%%
+%% @spec stop(State) -> void()
+%% @end
+%%--------------------------------------------------------------------
+stop(_State) ->
+    ok.
 
 %%%===================================================================
 %%% Internal functions

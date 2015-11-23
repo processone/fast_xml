@@ -1,4 +1,4 @@
-# Erlang and Elixir XML Parsing [![Build Status](https://travis-ci.org/processone/xml.svg?branch=master)](https://travis-ci.org/processone/xml) [![Coverage Status](https://coveralls.io/repos/processone/xml/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/xml?branch=master)
+# Erlang and Elixir XML Parsing [![Build Status](https://travis-ci.org/processone/fast_xml.svg?branch=master)](https://travis-ci.org/processone/fast_xml) [![Coverage Status](https://coveralls.io/repos/processone/fast_xml/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/fast_xml?branch=master)
 
 Fast Expat based Erlang XML parsing and manipulation library, with a
 strong focus on XML stream parsing from network.
@@ -57,14 +57,14 @@ attr type if a tuple of the form:
 
 ## XML full structure parsing
 
-You can definitely parse a complete XML structure with `p1_xml`:
+You can definitely parse a complete XML structure with `fast_xml`:
 
 ```
 $ erl -pa ebin
 Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
 Eshell V6.3  (abort with ^G)
-1> application:start(p1_xml).
+1> application:start(fast_xml).
 ok
 2> xml_stream:parse_element(<<"<test>content cdata</test>">>).
 {xmlel,<<"test">>,[],[{xmlcdata,<<"content cdata">>}]}
@@ -94,7 +94,7 @@ Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [
 Eshell V6.3  (abort with ^G)
 
 % Start the application:
-1> application:start(p1_xml).
+1> application:start(fast_xml).
 ok
 
 % Create a new stream, using self PID to received XML parsing event:

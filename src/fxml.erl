@@ -1,5 +1,5 @@
 %%%----------------------------------------------------------------------
-%%% File    : xml.erl
+%%% File    : fxml.erl
 %%% Author  : Alexey Shchepin <alexey@process-one.net>
 %%% Purpose : XML utils for parsing, matching, processing XML
 %%% Created : 20 Nov 2002 by Alexey Shchepin <alexey@process-one.net>
@@ -21,7 +21,7 @@
 %%%
 %%%----------------------------------------------------------------------
 
--module(xml).
+-module(fxml).
 
 -author('alexey@process-one.net').
 
@@ -36,14 +36,14 @@
 
 -export([load_nif/0]).
 
--include("xml.hrl").
+-include("fxml.hrl").
 
 %% Replace element_to_binary/1 with NIF
 load_nif() ->
-    SOPath = p1_nif_utils:get_so_path(?MODULE, [p1_xml, xml], "xml"),
+    SOPath = p1_nif_utils:get_so_path(?MODULE, [fast_xml], "fxml"),
     case catch erlang:load_nif(SOPath, 0) of
         ok -> ok;
-        Err -> error_logger:warning_msg("unable to load xml NIF: ~p~n", [Err]),
+        Err -> error_logger:warning_msg("unable to load fxml NIF: ~p~n", [Err]),
                {error, unable_to_load_nif}
     end.
 
