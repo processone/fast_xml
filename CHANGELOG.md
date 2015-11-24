@@ -1,3 +1,7 @@
+# Version 1.1.2
+
+* Application is now called fast_xml (Mickaël Rémond)
+
 # Version 1.1.1
 
 * Support for both rebar and rebar3 (Mickaël Rémond)
