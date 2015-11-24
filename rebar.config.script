@@ -50,7 +50,7 @@ Cfg0 = ModCfg(CONFIG, [port_env, "CFLAGS"], fun(V) -> V ++ " " ++ CfgCFlags end,
 Cfg00 = ModCfg(Cfg0, [port_env, "LDFLAGS"], fun(V) -> V ++ " " ++ CfgLDFlags end, "$LDFLAGS"),
 Cfg1 = case CfgWithGCov of
            "true" ->
-               V1 = ModCfg(Cfg00, [post_hooks], fun(V) -> V ++ [{eunit, "gcov -o c_src fxml xml_stream"},
+               V1 = ModCfg(Cfg00, [post_hooks], fun(V) -> V ++ [{eunit, "gcov -o c_src fxml fxml_stream"},
                                                                 {eunit, "mv *.gcov .eunit/"}] end, []),
                V2 = ModCfg(V1, [port_env, "LDFLAGS"], fun(V) -> V ++ " --coverage" end, ""),
                ModCfg(V2, [port_env, "CFLAGS"], fun(V) -> V ++ " --coverage" end, "");

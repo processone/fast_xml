@@ -21,7 +21,7 @@
 %%%
 %%%----------------------------------------------------------------------
 
--module(xml_gen).
+-module(fxml_gen).
 
 -compile(debug_info).
 %% Generator API
@@ -32,17 +32,17 @@
 -export([dec_int/1, dec_int/3, dec_enum/2,
          enc_int/1, enc_enum/1, not_empty/1]).
 
--include("xml_gen.hrl").
+-include("fxml_gen.hrl").
 -include("fxml.hrl").
 
 -define(err(F, Args),
 	begin
-	    io:format("** xml_gen error: " ++ F ++ "~n", Args),
+	    io:format("** fxml_gen error: " ++ F ++ "~n", Args),
 	    erlang:error(badarg)
 	end).
 
--define(info(F, Args), io:format("xml_gen: " ++ F ++ "~n", Args)).
--define(warn(F, Args), io:format("* xml_gen warning: " ++ F ++ "~n", Args)).
+-define(info(F, Args), io:format("fxml_gen: " ++ F ++ "~n", Args)).
+-define(warn(F, Args), io:format("* fxml_gen warning: " ++ F ++ "~n", Args)).
 
 %%====================================================================
 %% Compiler API
@@ -358,7 +358,7 @@ record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, Opts) ->
 header(FileName) ->
     erl_syntax:comment(
       0,
-      ["% Created automatically by XML generator (xml_gen.erl)",
+      ["% Created automatically by XML generator (fxml_gen.erl)",
        "% Source: " ++ FileName]).
 
 make_top_decoders(TaggedSpecs, ModName, Opts) when is_list(Opts) ->

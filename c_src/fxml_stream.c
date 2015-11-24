@@ -896,4 +896,4 @@ static ErlNifFunc nif_funcs[] =
     {"change_callback_pid", 2, change_callback_pid_nif}
   };
 
-ERL_NIF_INIT(xml_stream, nif_funcs, load, NULL, NULL, NULL)
+ERL_NIF_INIT(fxml_stream, nif_funcs, load, NULL, NULL, NULL)

@@ -33,68 +33,68 @@ new() ->
 new(Pid) ->
     new(Pid, infinity).
 new(Pid, MaxSize) ->
-    xml_stream:new(Pid, MaxSize).
+    fxml_stream:new(Pid, MaxSize).
 
 close(State) ->
-    ?assertEqual(true, xml_stream:close(State)).
+    ?assertEqual(true, fxml_stream:close(State)).
 
 start_test() ->
     ?assertEqual(ok, application:start(fast_xml)).
 
 tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
-		 xml_stream:parse_element(<<"<root/>">>)).
+		 fxml_stream:parse_element(<<"<root/>">>)).
 
 empty_tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
-		 xml_stream:parse_element(<<"<root></root>">>)).
+		 fxml_stream:parse_element(<<"<root></root>">>)).
 
 empty_tag_with_ns_test() ->
     ?assertEqual(#xmlel{name = <<"root">>, attrs = [{<<"xmlns">>, <<"ns">>}]},
-		 xml_stream:parse_element(<<"<root xmlns='ns'></root>">>)).
+		 fxml_stream:parse_element(<<"<root xmlns='ns'></root>">>)).
 
 tag_with_cdata_test() ->
     ?assertEqual(#xmlel{name = <<"root">>,
 			children = [{xmlcdata, <<"cdata">>}]},
-		 xml_stream:parse_element(<<"<root>cdata</root>">>)).
+		 fxml_stream:parse_element(<<"<root>cdata</root>">>)).
 
 tag_with_attrs_test() ->
     ?assertEqual(#xmlel{name = <<"root">>,
 			attrs = [{<<"a">>, <<"1">>}, {<<"b">>, <<"2">>}]},
-		 xml_stream:parse_element(<<"<root a='1' b='2'/>">>)).
+		 fxml_stream:parse_element(<<"<root a='1' b='2'/>">>)).
 
 tag_with_empty_attr_test() ->
     ?assertEqual(#xmlel{name = <<"root">>, attrs = [{<<"a">>, <<>>}]},
-		 xml_stream:parse_element(<<"<root a=''/>">>)).
+		 fxml_stream:parse_element(<<"<root a=''/>">>)).
 
 tag_with_prefix_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}]},
-		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'/>">>)).
+		 fxml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'/>">>)).
 
 tag_with_prefix_children1_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
 			children = [#xmlel{name = <<"prefix:a">>}]},
-		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><prefix:a/></prefix:root>">>)).
+		 fxml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><prefix:a/></prefix:root>">>)).
 
 tag_with_prefix_children2_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
 			children = [#xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns2">>}]}]},
-		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns2'/></prefix:root>">>)).
+		 fxml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns2'/></prefix:root>">>)).
 
 tag_with_prefix_children3_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
 			children = [#xmlel{name = <<"zed:a">>, attrs=[{<<"xmlns:zed">>, <<"ns2">>}]}]},
-		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><zed:a xmlns:zed='ns2'/></prefix:root>">>)).
+		 fxml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><zed:a xmlns:zed='ns2'/></prefix:root>">>)).
 
 tag_with_prefix_children4_test() ->
     ?assertEqual(#xmlel{name = <<"prefix:root">>,
 			attrs = [{<<"xmlns:prefix">>, <<"ns">>}],
 			children = [#xmlel{name = <<"a">>, attrs=[{<<"xmlns">>, <<"ns">>}]}]},
-		 xml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns'/></prefix:root>">>)).
+		 fxml_stream:parse_element(<<"<prefix:root xmlns:prefix='ns'><a xmlns='ns'/></prefix:root>">>)).
 
 tag_with_attr_with_prefix_test() ->
     ?assertEqual(#xmlel{name = <<"root">>,
@@ -102,7 +102,7 @@ tag_with_attr_with_prefix_test() ->
 				 {<<"xmlns:prefix2">>, <<"ns2">>},
 				 {<<"prefix1:a">>, <<"1">>},
 				 {<<"prefix2:b">>, <<"2">>}]},
-		 xml_stream:parse_element(<<
+		 fxml_stream:parse_element(<<
 		   "<root prefix1:a='1' xmlns:prefix1='ns1'",
 		   "      prefix2:b='2' xmlns:prefix2='ns2'/>">>)).
 
@@ -112,7 +112,7 @@ tag_with_tags_test() ->
 				    {xmlcdata, <<"cdata1">>},
 				    #xmlel{name = <<"b">>},
 				    {xmlcdata, <<"cdata2">>}]},
-		 xml_stream:parse_element(<<"<root><a/>cdata1<b/>cdata2</root>">>)).
+		 fxml_stream:parse_element(<<"<root><a/>cdata1<b/>cdata2</root>">>)).
 
 receiver(Acc) ->
     receive
@@ -138,7 +138,7 @@ stream_test() ->
             <<"junk3">>, <<"</prefix:root>">>],
     StreamN = lists:foldl(
 		fun(Chunk, Stream) ->
-			xml_stream:parse(Stream, Chunk)
+			fxml_stream:parse(Stream, Chunk)
 		end, Stream0, Data),
     close(StreamN),
     ?assertEqual(
@@ -164,7 +164,7 @@ stream_normalized_ns_test() ->
             <<"junk3">>, <<"</prefix:root>">>],
     StreamN = lists:foldl(
 		fun(Chunk, Stream) ->
-			xml_stream:parse(Stream, Chunk)
+			fxml_stream:parse(Stream, Chunk)
 		end, Stream0, Data),
     close(StreamN),
     ?assertEqual(
@@ -196,9 +196,9 @@ stream_normalized_ns_test() ->
 stream_reset_test() ->
     CallbackPid = spawn_link(fun() -> receiver([]) end),
     S0 = new(CallbackPid),
-    S1 = xml_stream:parse(S0, <<"<a xmlns='ns1'><b/>">>),
-    S2 = xml_stream:reset(S1),
-    S3 = xml_stream:parse(S2, <<"<a><b/></a>">>),
+    S1 = fxml_stream:parse(S0, <<"<a xmlns='ns1'><b/>">>),
+    S2 = fxml_stream:reset(S1),
+    S3 = fxml_stream:parse(S2, <<"<a><b/></a>">>),
     close(S3),
     ?assertEqual(
        [{xmlstreamstart, <<"a">>, [{<<"xmlns">>, <<"ns1">>}]},
@@ -210,7 +210,7 @@ stream_reset_test() ->
 stream_error_test() ->
     CallbackPid = spawn_link(fun() -> receiver([]) end),
     S0 = new(CallbackPid),
-    S1 = xml_stream:parse(S0, <<"<a><b>a</c>">>),
+    S1 = fxml_stream:parse(S0, <<"<a><b>a</c>">>),
     close(S1),
     ?assertEqual(
        [{xmlstreamstart, <<"a">>, []},
@@ -224,7 +224,7 @@ stream_with_joined_cdata_test() ->
             <<"</a>">>, <<"</root>">>],
     StreamN = lists:foldl(
 		fun(Chunk, Stream) ->
-			xml_stream:parse(Stream, Chunk)
+			fxml_stream:parse(Stream, Chunk)
 		end, Stream0, Data),
     close(StreamN),
     ?assertEqual(
@@ -237,32 +237,32 @@ stream_with_joined_cdata_test() ->
 splitted_stream_test() ->
     CallbackPid = spawn_link(fun() -> receiver([]) end),
     Stream0 = new(CallbackPid),
-    Stream1 = xml_stream:parse(Stream0, <<"<root">>),
+    Stream1 = fxml_stream:parse(Stream0, <<"<root">>),
     ?assertEqual([], collect_events(CallbackPid)),
-    Stream2 = xml_stream:parse(Stream1, <<"><a>">>),
+    Stream2 = fxml_stream:parse(Stream1, <<"><a>">>),
     ?assertEqual([{xmlstreamstart, <<"root">>, []}],
 		 collect_events(CallbackPid)),
-    Stream3 = xml_stream:parse(Stream2, <<"</a><b/><c attr=">>),
+    Stream3 = fxml_stream:parse(Stream2, <<"</a><b/><c attr=">>),
     ?assertEqual([{xmlstreamelement, #xmlel{name = <<"a">>}},
 		  {xmlstreamelement, #xmlel{name = <<"b">>}}],
 		 collect_events(CallbackPid)),
-    Stream4 = xml_stream:parse(Stream3, <<"'1'></c>">>),
+    Stream4 = fxml_stream:parse(Stream3, <<"'1'></c>">>),
     ?assertEqual([{xmlstreamelement, #xmlel{name = <<"c">>,
 					    attrs = [{<<"attr">>, <<"1">>}]}}],
 		 collect_events(CallbackPid)),
-    Stream5 = xml_stream:parse(Stream4, <<"">>),
+    Stream5 = fxml_stream:parse(Stream4, <<"">>),
     ?assertEqual([], collect_events(CallbackPid)),
-    Stream6 = xml_stream:parse(Stream5, <<"</root>">>),
+    Stream6 = fxml_stream:parse(Stream5, <<"</root>">>),
     ?assertEqual([{xmlstreamend, <<"root">>}], collect_events(CallbackPid)),
     close(Stream6).
 
 too_big_test() ->
     CallbackPid = spawn_link(fun() -> receiver([]) end),
     Stream0 = new(CallbackPid, 5),
-    Stream1 = xml_stream:parse(Stream0, <<"<a>">>),
-    Stream2 = xml_stream:parse(Stream1, <<"<b/>">>),
-    Stream3 = xml_stream:parse(Stream2, <<"<c/>">>),
-    Stream4 = xml_stream:parse(Stream3, <<"<de/>">>),
+    Stream1 = fxml_stream:parse(Stream0, <<"<a>">>),
+    Stream2 = fxml_stream:parse(Stream1, <<"<b/>">>),
+    Stream3 = fxml_stream:parse(Stream2, <<"<c/>">>),
+    Stream4 = fxml_stream:parse(Stream3, <<"<de/>">>),
     ?assertEqual([{xmlstreamstart, <<"a">>, []},
 		  {xmlstreamelement, #xmlel{name = <<"b">>}},
 		  {xmlstreamelement, #xmlel{name = <<"c">>}},
@@ -273,60 +273,60 @@ too_big_test() ->
 close_close_test() ->
     Stream = new(),
     close(Stream),
-    ?assertError(badarg, xml_stream:close(Stream)).
+    ?assertError(badarg, fxml_stream:close(Stream)).
 
 close_parse_test() ->
     Stream = new(),
     close(Stream),
-    ?assertError(badarg, xml_stream:parse(Stream, <<"junk">>)).
+    ?assertError(badarg, fxml_stream:parse(Stream, <<"junk">>)).
 
 close_change_callback_pid_test() ->
     Stream = new(),
     close(Stream),
-    ?assertError(badarg, xml_stream:change_callback_pid(Stream, self())).
+    ?assertError(badarg, fxml_stream:change_callback_pid(Stream, self())).
 
 change_callback_pid_test() ->
     Pid1 = spawn_link(fun() -> receiver([]) end),
     Pid2 = spawn_link(fun() -> receiver([]) end),
     Stream0 = new(Pid1),
-    Stream1 = xml_stream:parse(Stream0, <<"<root>">>),
+    Stream1 = fxml_stream:parse(Stream0, <<"<root>">>),
     ?assertEqual([{xmlstreamstart, <<"root">>, []}],
 		 collect_events(Pid1)),
-    Stream2 = xml_stream:change_callback_pid(Stream1, Pid2),
-    Stream3 = xml_stream:parse(Stream2, <<"</root>">>),
+    Stream2 = fxml_stream:change_callback_pid(Stream1, Pid2),
+    Stream3 = fxml_stream:parse(Stream2, <<"</root>">>),
     ?assertEqual([{xmlstreamend, <<"root">>}],
 		 collect_events(Pid2)),
     close(Stream3).
 
 badarg_new_test() ->
-    ?assertError(badarg, xml_stream:new(1)),
-    ?assertError(badarg, xml_stream:new(self(), unlimited)),
-    ?assertError(badarg, xml_stream:new(foo, fun() -> ok end)).
+    ?assertError(badarg, fxml_stream:new(1)),
+    ?assertError(badarg, fxml_stream:new(self(), unlimited)),
+    ?assertError(badarg, fxml_stream:new(foo, fun() -> ok end)).
 
 badarg_parse_test() ->
     Stream = new(),
-    ?assertError(badarg, xml_stream:parse(1, <<"<root>">>)),
-    ?assertError(badarg, xml_stream:parse(<<>>, "<root>")),
-    ?assertError(badarg, xml_stream:parse(Stream, blah)),
-    ?assertError(badarg, xml_stream:parse(foo, fun() -> ok end)),
+    ?assertError(badarg, fxml_stream:parse(1, <<"<root>">>)),
+    ?assertError(badarg, fxml_stream:parse(<<>>, "<root>")),
+    ?assertError(badarg, fxml_stream:parse(Stream, blah)),
+    ?assertError(badarg, fxml_stream:parse(foo, fun() -> ok end)),
     close(Stream).
 
 badarg_change_callback_pid_test() ->
     Stream = new(),
-    ?assertError(badarg, xml_stream:change_callback_pid(1, self())),
-    ?assertError(badarg, xml_stream:change_callback_pid(<<>>, self())),
-    ?assertError(badarg, xml_stream:change_callback_pid(Stream, foo)),
-    ?assertError(badarg, xml_stream:change_callback_pid(foo, fun() -> ok end)),
+    ?assertError(badarg, fxml_stream:change_callback_pid(1, self())),
+    ?assertError(badarg, fxml_stream:change_callback_pid(<<>>, self())),
+    ?assertError(badarg, fxml_stream:change_callback_pid(Stream, foo)),
+    ?assertError(badarg, fxml_stream:change_callback_pid(foo, fun() -> ok end)),
     close(Stream).
 
 badarg_close_test() ->
     Stream = new(),
-    ?assertError(badarg, xml_stream:close(1)),
-    ?assertError(badarg, xml_stream:close(<<>>)),
+    ?assertError(badarg, fxml_stream:close(1)),
+    ?assertError(badarg, fxml_stream:close(<<>>)),
     close(Stream).
 
 badarg_parse_element_test() ->
-    ?assertError(badarg, xml_stream:parse_element(1)).
+    ?assertError(badarg, fxml_stream:parse_element(1)).
 
 parse_error_test() ->
     L = ["<", "<>", "</>", "</>", "/>",
@@ -335,7 +335,7 @@ parse_error_test() ->
 	 "<x:y/>", "<x y:a='1'/>"],
     lists:foreach(
       fun(S) ->
-	      ?assertMatch({error, _}, xml_stream:parse_element(list_to_binary(S)))
+	      ?assertMatch({error, _}, fxml_stream:parse_element(list_to_binary(S)))
       end, L).
 
 dead_pid_test() ->
@@ -343,7 +343,7 @@ dead_pid_test() ->
     ?assertEqual(true, exit(CallbackPid, kill)),
     ?assertEqual(false, is_process_alive(CallbackPid)),
     Stream0 = new(CallbackPid),
-    Stream1 = xml_stream:parse(Stream0, <<"<root><a/></root>">>),
+    Stream1 = fxml_stream:parse(Stream0, <<"<root><a/></root>">>),
     close(Stream1).
 
 huge_element_test_() ->
@@ -354,7 +354,7 @@ huge_element_test_() ->
 	     Data = ["<root>", [[$<, Tag, "/>"] || Tag <- Tags], "</root>"],
 	     Els = #xmlel{name = <<"root">>,
 			  children = [#xmlel{name = Tag} || Tag <- Tags]},
-	     ?assertEqual(Els, xml_stream:parse_element(iolist_to_binary(Data)))
+	     ?assertEqual(Els, fxml_stream:parse_element(iolist_to_binary(Data)))
      end}.
 
 many_stream_elements_test_() ->
@@ -362,13 +362,13 @@ many_stream_elements_test_() ->
      fun() ->
 	     CallbackPid = spawn(fun() -> receiver([]) end),
 	     Stream0 = new(CallbackPid),
-	     Stream1 = xml_stream:parse(Stream0, <<"<root>">>),
+	     Stream1 = fxml_stream:parse(Stream0, <<"<root>">>),
 	     ?assertEqual([{xmlstreamstart, <<"root">>, []}],
 			  collect_events(CallbackPid)),
 	     Stream2 = lists:foldl(
 			 fun(I, Stream) ->
 				 Tag = list_to_binary(["a", integer_to_list(I)]),
-				 NewStream = xml_stream:parse(Stream, iolist_to_binary([$<, Tag, "/>"])),
+				 NewStream = fxml_stream:parse(Stream, iolist_to_binary([$<, Tag, "/>"])),
 				 ?assertEqual([{xmlstreamelement, #xmlel{name = Tag}}],
 					      collect_events(CallbackPid)),
 				 NewStream
@@ -392,7 +392,7 @@ billionlaughs_test() ->
 	"xmlns:stream='http://etherx.jabber.org/streams' version='1.0' to='&lol9;'>\n">>,
     CallbackPid = spawn_link(fun() -> receiver([]) end),
     Stream0 = new(CallbackPid),
-    Stream1 = xml_stream:parse(Stream0, Data),
+    Stream1 = fxml_stream:parse(Stream0, Data),
     close(Stream1),
     ?assertMatch([{xmlstreamerror, _}], collect_events(CallbackPid)).
 

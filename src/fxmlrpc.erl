@@ -43,7 +43,7 @@
 -spec decode(xmlel()) -> {ok, call()} | {ok, response()} | {error, any()}.
 
 decode(El) ->
-    try xmlrpc_codec:decode(El) of
+    try fxmlrpc_codec:decode(El) of
 	{call, Name, Params} ->
 	    {ok, {call, Name, [decode_param(Param) || Param <- Params]}};
 	{response, Params} when is_list(Params) ->
@@ -66,18 +66,18 @@ decode(El) ->
 	    end;
 	Other ->
 	    {error, {unexpected_element, Other}}
-    catch error:{xmlrpc_codec, Reason} ->
+    catch error:{fxmlrpc_codec, Reason} ->
 	    {error, Reason}
     end.
 
 -spec encode(call() | response()) -> xmlel().
 
 encode({call, Name, Params}) ->
-    xmlrpc_codec:encode({call, Name, [encode_param(Param) || Param <- Params]});
+    fxmlrpc_codec:encode({call, Name, [encode_param(Param) || Param <- Params]});
 encode({response, Params}) when is_list(Params) ->
-    xmlrpc_codec:encode({response, [encode_param(Param) || Param <- Params]});
+    fxmlrpc_codec:encode({response, [encode_param(Param) || Param <- Params]});
 encode({response, {fault, Code, String}}) ->
-    xmlrpc_codec:encode(
+    fxmlrpc_codec:encode(
       {response, {fault, {{struct, [{faultCode, {{int, Code}, undefined}},
 				    {faultString, {{string, String}, undefined}}]},
 			  undefined}}}).

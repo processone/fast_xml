@@ -10,7 +10,7 @@ It supports:
   network XML stream like XMPP.
 
 This module can parse files much faster than built-in module `xmerl`.
-Depending on file complexity and size `xml_stream:parse_element/1` can
+Depending on file complexity and size `fxml_stream:parse_element/1` can
 be 8-18 times faster than calling `xmerl_scan:string/2`.
 
 ## Building
@@ -66,7 +66,7 @@ Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [
 Eshell V6.3  (abort with ^G)
 1> application:start(fast_xml).
 ok
-2> xml_stream:parse_element(<<"<test>content cdata</test>">>).
+2> fxml_stream:parse_element(<<"<test>content cdata</test>">>).
 {xmlel,<<"test">>,[],[{xmlcdata,<<"content cdata">>}]}
 ```
 
@@ -98,11 +98,11 @@ Eshell V6.3  (abort with ^G)
 ok
 
 % Create a new stream, using self PID to received XML parsing event:
-2> S1 = xml_stream:new(self()).
+2> S1 = fxml_stream:new(self()).
 <<>>
 
 % Start feeding content to the XML parser.
-3> S2 = xml_stream:parse(S1, <<"<root>">>).
+3> S2 = fxml_stream:parse(S1, <<"<root>">>).
 <<>>
 
 % Receive Erlang message send to shell process:
@@ -111,7 +111,7 @@ Shell got {'$gen_event',{xmlstreamstart,<<"root">>,[]}}
 ok
 
 % Feed more content:
-5> S3 = xml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement">>).
+5> S3 = fxml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement">>).
 <<>>
 
 % Receive more messages:
@@ -123,7 +123,7 @@ Shell got {'$gen_event',
 ok
 
 % Feed more content:
-7> S4 = xml_stream:parse(S3, <<"</root>">>).      
+7> S4 = fxml_stream:parse(S3, <<"</root>">>).      
 <<>>
 
 % Receive messages:
@@ -131,7 +131,7 @@ ok
 Shell got {'$gen_event',{xmlstreamend,<<"root">>}}
 ok
 
-9> xml_stream:close(S4).
+9> fxml_stream:close(S4).
 true
 ```
 

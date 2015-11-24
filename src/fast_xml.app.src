@@ -27,7 +27,7 @@
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
-  {mod,          {fxml_app,[]}},
+  {mod,          {fast_xml,[]}},
 
   %% hex.pm packaging:
   {files, ["src/", "c_src/fast_xml.c", "c_src/xml_stream.c", "include/", "spec/", "rebar.config", "rebar.config.script", "README.md", "CHANGELOG.md", "LICENSE.txt"]},

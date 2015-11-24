@@ -1,7 +1,7 @@
-%% Created automatically by XML generator (xml_gen.erl)
-%% Source: xmlrpc_codec.spec
+%% Created automatically by XML generator (fxml_gen.erl)
+%% Source: fxmlrpc_codec.spec
 
--module(xmlrpc_codec).
+-module(fxmlrpc_codec).
 
 -compile({nowarn_unused_function,
 	  [{dec_int, 3}, {dec_int, 1}, {dec_enum, 2},
@@ -56,7 +56,7 @@ decode(_el, Opts) ->
       {xmlel, <<"methodCall">>, _, _} ->
 	  decode_methodCall(<<>>, IgnoreEls, _el);
       {xmlel, _name, _, _} ->
-	  erlang:error({xmlrpc_codec, {unknown_tag, _name, <<>>}})
+	  erlang:error({fxmlrpc_codec, {unknown_tag, _name, <<>>}})
     end.
 
 is_known_tag({xmlel, <<"name">>, _, _}) -> true;
@@ -198,12 +198,12 @@ encode_name(Cdata, _xmlns_attrs) ->
     {xmlel, <<"name">>, _attrs, _els}.
 
 decode_name_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"name">>, __TopXMLNS}});
 decode_name_cdata(__TopXMLNS, _val) ->
     case catch erlang:binary_to_atom(_val, utf8) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"name">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -221,13 +221,13 @@ decode_member_els(__TopXMLNS, __IgnoreEls, [], Value,
 		  Name) ->
     {case Value of
        error ->
-	   erlang:error({xmlrpc_codec,
+	   erlang:error({fxmlrpc_codec,
 			 {missing_tag, <<"value">>, __TopXMLNS}});
        {value, Value1} -> Value1
      end,
      case Name of
        error ->
-	   erlang:error({xmlrpc_codec,
+	   erlang:error({fxmlrpc_codec,
 			 {missing_tag, <<"name">>, __TopXMLNS}});
        {value, Name1} -> Name1
      end};
@@ -333,7 +333,7 @@ decode_array(__TopXMLNS, __IgnoreEls,
 decode_array_els(__TopXMLNS, __IgnoreEls, [], Data) ->
     case Data of
       error ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{missing_tag, <<"data">>, __TopXMLNS}});
       {value, Data1} -> Data1
     end;
@@ -377,12 +377,12 @@ encode_boolean({boolean, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"boolean">>, _attrs, _els}.
 
 decode_boolean_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"boolean">>, __TopXMLNS}});
 decode_boolean_cdata(__TopXMLNS, _val) ->
     case catch dec_bool(_val) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"boolean">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -414,7 +414,7 @@ encode_dateTime({date, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"dateTime.iso8601">>, _attrs, _els}.
 
 decode_dateTime_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"dateTime.iso8601">>,
 		   __TopXMLNS}});
 decode_dateTime_cdata(__TopXMLNS, _val) -> _val.
@@ -444,7 +444,7 @@ encode_base64({base64, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"base64">>, _attrs, _els}.
 
 decode_base64_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"base64">>, __TopXMLNS}});
 decode_base64_cdata(__TopXMLNS, _val) -> _val.
 
@@ -473,12 +473,12 @@ encode_double({double, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"double">>, _attrs, _els}.
 
 decode_double_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"double">>, __TopXMLNS}});
 decode_double_cdata(__TopXMLNS, _val) ->
     case catch erlang:binary_to_float(_val) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"double">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -536,12 +536,12 @@ encode_int({int, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"int">>, _attrs, _els}.
 
 decode_int_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"int">>, __TopXMLNS}});
 decode_int_cdata(__TopXMLNS, _val) ->
     case catch erlang:binary_to_integer(_val) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"int">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -571,12 +571,12 @@ encode_i4({i4, Cdata}, _xmlns_attrs) ->
     {xmlel, <<"i4">>, _attrs, _els}.
 
 decode_i4_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"i4">>, __TopXMLNS}});
 decode_i4_cdata(__TopXMLNS, _val) ->
     case catch erlang:binary_to_integer(_val) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"i4">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -697,7 +697,7 @@ decode_param(__TopXMLNS, __IgnoreEls,
 decode_param_els(__TopXMLNS, __IgnoreEls, [], Value) ->
     case Value of
       error ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{missing_tag, <<"value">>, __TopXMLNS}});
       {value, Value1} -> Value1
     end;
@@ -771,12 +771,12 @@ encode_methodName(Cdata, _xmlns_attrs) ->
     {xmlel, <<"methodName">>, _attrs, _els}.
 
 decode_methodName_cdata(__TopXMLNS, <<>>) ->
-    erlang:error({xmlrpc_codec,
+    erlang:error({fxmlrpc_codec,
 		  {missing_cdata, <<>>, <<"methodName">>, __TopXMLNS}});
 decode_methodName_cdata(__TopXMLNS, _val) ->
     case catch erlang:binary_to_atom(_val, utf8) of
       {'EXIT', _} ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{bad_cdata_value, <<>>, <<"methodName">>, __TopXMLNS}});
       _res -> _res
     end.
@@ -793,7 +793,7 @@ decode_fault(__TopXMLNS, __IgnoreEls,
 decode_fault_els(__TopXMLNS, __IgnoreEls, [], Value) ->
     case Value of
       error ->
-	  erlang:error({xmlrpc_codec,
+	  erlang:error({fxmlrpc_codec,
 			{missing_tag, <<"value">>, __TopXMLNS}});
       {value, Value1} -> Value1
     end;
@@ -861,7 +861,7 @@ decode_methodCall_els(__TopXMLNS, __IgnoreEls, [],
     {Params,
      case Name of
        error ->
-	   erlang:error({xmlrpc_codec,
+	   erlang:error({fxmlrpc_codec,
 			 {missing_tag, <<"methodName">>, __TopXMLNS}});
        {value, Name1} -> Name1
      end};

@@ -32,7 +32,7 @@ defmodule XmlTest do
   
   property "Serialize and parse same XML packet" do
     forall xml_chunk <- xml_el do
-      :xml_stream.parse_element(:fxml.element_to_binary(xml_chunk)) == xml_chunk
+      :fxml_stream.parse_element(:fxml.element_to_binary(xml_chunk)) == xml_chunk
     end
   end
 

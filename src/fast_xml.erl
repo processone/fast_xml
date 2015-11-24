@@ -1,7 +1,7 @@
 %%%----------------------------------------------------------------------
 %%% File    : fxml_app.erl
 %%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
-%%% Purpose : XML application
+%%% Purpose : Fast XML application
 %%% Created : 1 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
 %%%
@@ -21,7 +21,7 @@
 %%%
 %%%----------------------------------------------------------------------
 
--module(fxml_app).
+-module(fast_xml).
 
 -behaviour(application).
 
@@ -49,7 +49,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    case {fxml:load_nif(), xml_stream:load_nif()} of
+    case {fxml:load_nif(), fxml_stream:load_nif()} of
         {ok, ok} ->
             fxml_sup:start_link();
         {{error,_} = E1, _} ->
