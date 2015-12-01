@@ -70,8 +70,11 @@ Erlang/OTP 17 [erts-6.3] [source] [64-bit] [smp:4:4] [async-threads:10] [hipe] [
 Eshell V6.3  (abort with ^G)
 1> application:start(fast_xml).
 ok
-2> fxml_stream:parse_element(<<"<test>content cdata</test>">>).
-{xmlel,<<"test">>,[],[{xmlcdata,<<"content cdata">>}]}
+2> rr(fxml).
+[xmlel]
+3> fxml_stream:parse_element(<<"<test>content cdata</test>">>).
+#xmlel{name = <<"test">>,attrs = [],
+       children = [{xmlcdata,<<"content cdata">>}]}
 ```
 
 ## XML Stream parsing example
