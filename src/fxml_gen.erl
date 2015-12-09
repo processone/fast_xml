@@ -1800,7 +1800,7 @@ get_types(TaggedElems) ->
                           case term_is_record(RefElem#elem.result) of
                               true ->
                                   RecName = element(1, RefElem#elem.result),
-                                  [{{record, RecName}, [{0, []}]}];
+                                  [{{record, RecName}, {0, [{0, []}]}}];
                               false ->
                                   []
                           end
