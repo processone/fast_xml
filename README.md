@@ -1,4 +1,6 @@
-# Erlang and Elixir XML Parsing [![Build Status](https://travis-ci.org/processone/fast_xml.svg?branch=master)](https://travis-ci.org/processone/fast_xml) [![Coverage Status](https://coveralls.io/repos/processone/fast_xml/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/fast_xml?branch=master)
+# Erlang and Elixir XML Parsing
+
+[![Build Status](https://travis-ci.org/processone/fast_xml.svg?branch=master)](https://travis-ci.org/processone/fast_xml) [![Coverage Status](https://coveralls.io/repos/processone/fast_xml/badge.svg?branch=master&service=github)](https://coveralls.io/github/processone/fast_xml?branch=master) [![Hex version](https://img.shields.io/hexpm/v/fast_xml.svg "Hex version")](https://hex.pm/packages/fast_xml)
 
 Fast Expat based Erlang XML parsing and manipulation library, with a
 strong focus on XML stream parsing from network.
