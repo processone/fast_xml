@@ -82,6 +82,15 @@ static XML_Memory_Handling_Suite ms = {
 
 static ErlNifResourceType *parser_state_t = NULL;
 
+#define FAKE_BIN(STR) { sizeof(STR)-1, (unsigned char*)STR }
+
+static attrs_list_t stream_stream_ns_attr = {
+  FAKE_BIN("stream:stream"),
+  FAKE_BIN("http://etherx.jabber.org/streams")
+};
+
+static char *jabber_client_ns = "jabber:client";
+
 static int same_str_buf(const char *str, const char *buf, size_t buf_len)
 {
   if (strlen(str) != buf_len)
@@ -126,23 +135,29 @@ static ERL_NIF_TERM dup_to_term(ErlNifEnv *env, const char *buf, size_t buf_len)
   return term;
 }
 
-static int has_prefix_ns_from_top(state_t *state, const char *pfx, size_t pfx_len,
-                                  const char *ns, size_t ns_len)
+static int has_prefix_ns_from_list(attrs_list_t*list, const char *pfx, size_t pfx_len,
+                                   const char *ns, size_t ns_len)
 {
-  attrs_list_t *top_xmlns = state->top_xmlns_attrs;
-  while (pfx_len && top_xmlns &&
-         !state->elements_stack->redefined_top_prefix)
-  {
+  while (pfx_len && list) {
     if ((pfx == NULL ||
-            (top_xmlns->name.size == pfx_len && memcmp(top_xmlns->name.data, pfx, pfx_len) == 0)) &&
+         (list->name.size == pfx_len && memcmp(list->name.data, pfx, pfx_len) == 0)) &&
         (ns == NULL ||
-            (top_xmlns->value.size == ns_len && memcmp(top_xmlns->value.data, ns, ns_len) == 0)))
+         (list->value.size == ns_len && memcmp(list->value.data, ns, ns_len) == 0)))
     {
       return 1;
     }
-    top_xmlns = top_xmlns->next;
+    list = list->next;
   }
   return 0;
+}
+
+static int has_prefix_ns_from_top(state_t *state, const char *pfx, size_t pfx_len,
+                                  const char *ns, size_t ns_len)
+{
+  if (state->elements_stack->redefined_top_prefix || !pfx_len)
+    return 0;
+
+  return has_prefix_ns_from_list(state->top_xmlns_attrs, pfx, pfx_len, ns, ns_len);
 }
 
 static xmlns_op encode_name(state_t *state, const char *xml_name, ErlNifBinary *buf,
@@ -210,7 +225,7 @@ static xmlns_op encode_name(state_t *state, const char *xml_name, ErlNifBinary *
     else {
       *ns_str = top_element ? dup_buf(ns, ns_len) :
                 res == OP_REMOVE_PREFIX ?
-                dup_str(state->elements_stack->namespace) :
+                state->elements_stack->namespace :
                 dup_buf(ns, ns_len);
 
       if (!*ns_str) {
@@ -310,6 +325,9 @@ void erlXML_StartElementHandler(state_t *state,
   if (!state->normalize_ns)
     xmlns_op = OP_NOP;
 
+  int non_xmpp_ns = -1;
+  int had_stream_stream = 0;
+
   while (state->xmlns_attrs) {
     ERL_NIF_TERM tuple = 0;
     attrs_list_t *c = state->xmlns_attrs;
@@ -318,8 +336,28 @@ void erlXML_StartElementHandler(state_t *state,
     state->xmlns_attrs = c->next;
 
     if (state->depth == 1 && state->normalize_ns && c->name.size > 6) {
-      PARSER_MEM_ASSERT(dup_to_bin(&new_prefix, (char*)c->name.data+6, c->name.size-6));
-      PARSER_MEM_ASSERT(dup_to_bin(&new_ns, (char*)c->value.data, c->value.size));
+      if (non_xmpp_ns != 1 || !has_prefix_ns_from_list(&stream_stream_ns_attr,
+                                                       (char*)c->name.data+6, c->name.size-6,
+                                                       (char*)c->value.data, c->value.size))
+      {
+        if (had_stream_stream) {
+          PARSER_MEM_ASSERT(dup_to_bin(&new_prefix, (char*)stream_stream_ns_attr.name.data,
+                                       stream_stream_ns_attr.name.size));
+          PARSER_MEM_ASSERT(dup_to_bin(&new_ns, (char*)stream_stream_ns_attr.value.data,
+                                       stream_stream_ns_attr.value.size));
+          c->name = new_prefix;
+          c->value = new_ns;
+          c->next = state->top_xmlns_attrs;
+          state->top_xmlns_attrs = c;
+          had_stream_stream = 0;
+        }
+        non_xmpp_ns = 1;
+        PARSER_MEM_ASSERT(dup_to_bin(&new_prefix, (char*)c->name.data+6, c->name.size-6));
+        PARSER_MEM_ASSERT(dup_to_bin(&new_ns, (char*)c->value.data, c->value.size));
+      } else {
+        had_stream_stream = 1;
+        non_xmpp_ns = 0;
+      }
     }
 
     if (c->name.size == 5) { // xmlns
@@ -353,13 +391,17 @@ void erlXML_StartElementHandler(state_t *state,
     }
     attrs_term = enif_make_list_cell(env, tuple, attrs_term);
 
-    if (state->depth == 1 && state->normalize_ns && c->name.size > 6) {
+    if (non_xmpp_ns && state->depth == 1 && state->normalize_ns && c->name.size > 6) {
       c->name = new_prefix;
       c->value = new_ns;
       c->next = state->top_xmlns_attrs;
       state->top_xmlns_attrs = c;
     } else
       enif_free(c);
+  }
+
+  if (!non_xmpp_ns && state->depth == 1 && state->normalize_ns) {
+    state->top_xmlns_attrs = &stream_stream_ns_attr;
   }
 
   if (xmlns_op == OP_REPLACE_XMLNS) {
@@ -501,12 +543,14 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
     el->term = xmlel_term;
     el->next = state->elements_stack->children;
     state->elements_stack->children = el;
-    enif_free(cur_el->namespace);
+    if (cur_el->namespace != state->elements_stack->namespace)
+      enif_free(cur_el->namespace);
     enif_free(cur_el);
   } else {
     xmlel_stack_t *cur_el = state->elements_stack;
     state->elements_stack = cur_el->next;
-    enif_free(cur_el->namespace);
+    if (!state->elements_stack || cur_el->namespace != state->elements_stack->namespace)
+      enif_free(cur_el->namespace);
     enif_free(cur_el);
     send_event(state,
 	       enif_make_tuple2(state->send_env,
@@ -614,17 +658,19 @@ static void free_parser_allocated_structs(state_t *state) {
       c->children = cc->next;
       enif_free(cc);
     }
-    enif_free(c->namespace);
+    if (!c->next || c->namespace != c->next->namespace)
+      enif_free(c->namespace);
     state->elements_stack = c->next;
     enif_free(c);
   }
-  while (state->top_xmlns_attrs) {
-    attrs_list_t *c = state->top_xmlns_attrs;
-    state->top_xmlns_attrs = c->next;
-    enif_release_binary(&c->name);
-    enif_release_binary(&c->value);
-    enif_free(c);
-  }
+  if (state->top_xmlns_attrs != &stream_stream_ns_attr)
+    while (state->top_xmlns_attrs) {
+      attrs_list_t *c = state->top_xmlns_attrs;
+      state->top_xmlns_attrs = c->next;
+      enif_release_binary(&c->name);
+      enif_release_binary(&c->value);
+      enif_free(c);
+    }
 }
 
 static void destroy_parser_state(ErlNifEnv *env, void *data)
@@ -683,6 +729,7 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
   parser_state_t = enif_open_resource_type(env, NULL, "parser_state_t",
 					   destroy_parser_state,
 					   flags, NULL);
+
   return 0;
 }
 
