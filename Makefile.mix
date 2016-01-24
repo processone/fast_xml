@@ -5,6 +5,7 @@ CFLAGS = -g -O2 -Wall
 
 ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)
 CFLAGS += -I$(ERLANG_PATH)
+LDFLAGS += -lexpat
 
 ifneq ($(OS),Windows_NT)
 	CFLAGS += -fPIC
@@ -30,3 +31,8 @@ priv/lib/fxml.so: c_src/fxml.c
 clean:
 	$(RM) priv/lib/fxml_stream.so
 	$(RM) priv/lib/fxml.so
+
+# Local Variables:
+# mode: makefile
+# End:
+# vim: set filetype=makefile
