@@ -5,7 +5,7 @@ defmodule FastXML.Mixfile do
     [app: :fast_xml,
      version: "1.1.3",
      elixir: "~> 1.1",
-     compilers: [:make, :elixir, :app],
+     compilers: [:make, :elixir, :erlang, :app],
      aliases: aliases,
      deps: deps]
   end
