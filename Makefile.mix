@@ -17,7 +17,7 @@ endif
 
 .PHONY: all fast_xml clean
 
-all:  
+all: fast_xml
 
 fast_xml:
 	$(MIX) compile
