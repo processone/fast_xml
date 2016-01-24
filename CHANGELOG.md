@@ -1,3 +1,9 @@
+# Version 1.1.3
+
+* Memory optimizations (Paweł Chmielowski)
+* Update to latest version of p1_utils (Mickaël Rémond)
+* Erlang OTP R18 compliance (Evgeniy Khramtsov)
+
 # Version 1.1.2
 
 * Application is now called fast_xml (Mickaël Rémond)
