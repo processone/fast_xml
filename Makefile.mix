@@ -28,6 +28,5 @@ priv/lib/fxml.so: c_src/fxml.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml.c
 
 clean:
-	$(MIX) clean
 	$(RM) priv/lib/fxml_stream.so
 	$(RM) priv/lib/fxml.so
