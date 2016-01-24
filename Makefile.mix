@@ -1,0 +1,33 @@
+# This file is used to compile C NIF module in Elixir buildchain
+MIX = mix
+CFLAGS = -g -O2 -Wall
+#CFLAGS = -g -O3 -ansi -pedantic -Wall -Wextra -Wno-unused-parameter
+
+ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)
+CFLAGS += -I$(ERLANG_PATH)
+
+ifneq ($(OS),Windows_NT)
+	CFLAGS += -fPIC
+
+	ifeq ($(shell uname),Darwin)
+		LDFLAGS += -dynamiclib -undefined dynamic_lookup
+	endif
+endif
+
+.PHONY: all fast_xml clean
+
+all:  
+
+fast_xml:
+	$(MIX) compile
+
+priv/lib/fxml_stream.so: c_src/fxml_stream.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml_stream.c
+
+priv/lib/fxml.so: c_src/fxml.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml.c
+
+clean:
+	$(MIX) clean
+	$(RM) priv/lib/fxml_stream.so
+	$(RM) priv/lib/fxml.so
