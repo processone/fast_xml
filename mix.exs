@@ -27,7 +27,7 @@ defmodule FastXML.Mixfile do
   end
      
   def deps do
-    []
+    [{:p1_utils, "~> 1.0"}]
   end
 
   defp aliases do
