@@ -42,7 +42,7 @@ end
 defmodule Mix.Tasks.Compile.Make do
   @shortdoc "Compiles helper in c_src"
 
-  # TODO reformat 
+  # TODO refactor 
   def run(_) do
     if match? {:win32, _}, :os.type do
       {result, _error_code} = System.cmd("nmake", ["/F", "Makefile.mix", "priv\\lib\\fxml_stream.dll"], stderr_to_stdout: true)
