@@ -120,7 +120,7 @@ Shell got {'$gen_event',{xmlstreamstart,<<"root">>,[]}}
 ok
 
 % Feed more content:
-5> S3 = fxml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement">>).
+5> S3 = fxml_stream:parse(S2, <<"<xmlelement>content cdata</xmlelement>">>).
 <<>>
 
 % Receive more messages:
