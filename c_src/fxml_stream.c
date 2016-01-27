@@ -470,7 +470,7 @@ void erlXML_StartElementHandler(state_t *state,
     if (state->use_maps) {
       ERL_NIF_TERM map = enif_make_new_map(env);
       enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
-                        enif_make_atom(env, "FastXML.StreamStart"), &map);
+                        enif_make_atom(env, "Elixir.FastXML.StreamStart"), &map);
       enif_make_map_put(env, map, enif_make_atom(env, "name"),
                         enif_make_binary(env, &name_bin), &map);
       enif_make_map_put(env, map, enif_make_atom(env, "attrs"),
@@ -576,7 +576,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
     if (state->use_maps) {
       ERL_NIF_TERM map = enif_make_new_map(env);
       enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
-                        enif_make_atom(env, "FastXML.StreamEnd"), &map);
+                        enif_make_atom(env, "Elixir.FastXML.StreamEnd"), &map);
       enif_make_map_put(env, map, enif_make_atom(env, "name"),
                         enif_make_binary(env, &name_bin), &map);
       send_event(state, map);
@@ -594,7 +594,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
   if (state->use_maps) {
     xmlel_term = enif_make_new_map(env);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "__struct__"),
-                      enif_make_atom(env, "FastXML.El"), &xmlel_term);
+                      enif_make_atom(env, "Elixir.FastXML.El"), &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "name"), state->elements_stack->name, &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "attrs"), state->elements_stack->attrs, &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "childrens"),
@@ -629,7 +629,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
     enif_free(cur_el);
     if (state->use_maps) {
       enif_make_map_put(env, xmlel_term, enif_make_atom(env, "__struct__"),
-                        enif_make_atom(env, "FastXML.El"), &xmlel_term);
+                        enif_make_atom(env, "Elixir.FastXML.El"), &xmlel_term);
       send_event(state, xmlel_term);
     } else {
       send_event(state,
@@ -908,7 +908,7 @@ static void send_error(state_t *state, ERL_NIF_TERM msg) {
   if (state->use_maps) {
     ERL_NIF_TERM map = enif_make_new_map(env);
     enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
-                      enif_make_atom(env, "FastXML.StreamError"), &map);
+                      enif_make_atom(env, "Elixir.FastXML.StreamError"), &map);
     enif_make_map_put(env, map, enif_make_atom(env, "desc"),
                       msg, &map);
 

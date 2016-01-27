@@ -25,3 +25,20 @@ xml element record, composed of fields: name, attrs, children
   def stop,  do: :application.stop(:fast_xml)
 
 end
+
+# Elixir oriented data structures:
+defmodule FastXML.El do
+  defstruct name: "", attrs: %{}, children: []
+end
+
+defmodule FastXML.StreamStart do
+  defstruct name: "", attrs: %{}
+end
+
+defmodule FastXML.StreamEnd do
+  defstruct name: ""
+end
+
+defmodule FastXML.StreamError do
+  defstruct code: 0, desc: ""
+end
