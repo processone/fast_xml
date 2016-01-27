@@ -29,7 +29,8 @@ defmodule FastXML.Mixfile do
   def deps do
     [{:p1_utils, "~> 1.0"},
      {:earmark, "~> 0.1", only: :dev},
-     {:ex_doc, "~> 0.11", only: :dev}]
+     {:ex_doc, "~> 0.11", only: :dev},
+     {:eqc_ex, "~> 1.2", only: :test}]
   end
 
   defp aliases do
