@@ -597,7 +597,7 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
                       enif_make_atom(env, "Elixir.FastXML.El"), &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "name"), state->elements_stack->name, &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "attrs"), state->elements_stack->attrs, &xmlel_term);
-    enif_make_map_put(env, xmlel_term, enif_make_atom(env, "childrens"),
+    enif_make_map_put(env, xmlel_term, enif_make_atom(env, "children"),
         make_xmlel_children_list(state, state->elements_stack->children), &xmlel_term);
   } else {
     xmlel_term = enif_make_tuple4(env, enif_make_atom(env, "xmlel"),
