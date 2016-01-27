@@ -467,11 +467,22 @@ void erlXML_StartElementHandler(state_t *state,
   state->elements_stack = xmlel;
 
   if (state->pid && state->depth == 1) {
-    send_event(state,
-               enif_make_tuple3(env,
-                                enif_make_atom(env, "xmlstreamstart"),
-                                enif_make_binary(env, &name_bin),
-                                attrs_term));
+    if (state->use_maps) {
+      ERL_NIF_TERM map = enif_make_new_map(env);
+      enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
+                        enif_make_atom(env, "FastXML.StreamStart"), &map);
+      enif_make_map_put(env, map, enif_make_atom(env, "name"),
+                        enif_make_binary(env, &name_bin), &map);
+      enif_make_map_put(env, map, enif_make_atom(env, "attrs"),
+                        attrs_term, &map);
+      send_event(state, map);
+    } else {
+      send_event(state,
+                 enif_make_tuple3(env,
+                                  enif_make_atom(env, "xmlstreamstart"),
+                                  enif_make_binary(env, &name_bin),
+                                  attrs_term));
+    }
   } else {
     xmlel->name = enif_make_binary(env, &name_bin);
   }
@@ -562,10 +573,19 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
 
     PARSER_MEM_ASSERT(encode_name(state, name, &name_bin, NULL, NULL, 0));
 
-    send_event(state,
-	       enif_make_tuple2(env,
-				enif_make_atom(env, "xmlstreamend"),
-                                enif_make_binary(env, &name_bin)));
+    if (state->use_maps) {
+      ERL_NIF_TERM map = enif_make_new_map(env);
+      enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
+                        enif_make_atom(env, "FastXML.StreamEnd"), &map);
+      enif_make_map_put(env, map, enif_make_atom(env, "name"),
+                        enif_make_binary(env, &name_bin), &map);
+      send_event(state, map);
+    } else {
+      send_event(state,
+                 enif_make_tuple2(env,
+                                  enif_make_atom(env, "xmlstreamend"),
+                                  enif_make_binary(env, &name_bin)));
+    }
     return;
   }
 
@@ -573,6 +593,8 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
 
   if (state->use_maps) {
     xmlel_term = enif_make_new_map(env);
+    enif_make_map_put(env, xmlel_term, enif_make_atom(env, "__struct__"),
+                      enif_make_atom(env, "FastXML.El"), &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "name"), state->elements_stack->name, &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "attrs"), state->elements_stack->attrs, &xmlel_term);
     enif_make_map_put(env, xmlel_term, enif_make_atom(env, "childrens"),
@@ -605,10 +627,16 @@ void erlXML_EndElementHandler(state_t *state, const XML_Char *name)
     if (!state->elements_stack || cur_el->namespace_str != state->elements_stack->namespace_str)
       enif_free(cur_el->namespace_str);
     enif_free(cur_el);
-    send_event(state,
-	       enif_make_tuple2(state->send_env,
-				enif_make_atom(state->send_env, "xmlstreamelement"),
-				xmlel_term));
+    if (state->use_maps) {
+      enif_make_map_put(env, xmlel_term, enif_make_atom(env, "__struct__"),
+                        enif_make_atom(env, "FastXML.El"), &xmlel_term);
+      send_event(state, xmlel_term);
+    } else {
+      send_event(state,
+                 enif_make_tuple2(state->send_env,
+                                  enif_make_atom(state->send_env, "xmlstreamelement"),
+                                  xmlel_term));
+    }
   }
 
   return;
@@ -874,6 +902,25 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
   return el;
 }
 
+static void send_error(state_t *state, ERL_NIF_TERM msg) {
+  ErlNifEnv *env = state->send_env;
+
+  if (state->use_maps) {
+    ERL_NIF_TERM map = enif_make_new_map(env);
+    enif_make_map_put(env, map, enif_make_atom(env, "__struct__"),
+                      enif_make_atom(env, "FastXML.StreamError"), &map);
+    enif_make_map_put(env, map, enif_make_atom(env, "desc"),
+                      msg, &map);
+
+    send_event(state, map);
+  } else {
+    send_event(state,
+               enif_make_tuple2(env,
+                                enif_make_atom(env, "xmlstreamerror"),
+                                msg));
+  }
+}
+
 static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
 			      const ERL_NIF_TERM argv[])
 {
@@ -896,19 +943,13 @@ static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
   state->env = env;
 
   if (state->size >= state->max_size) {
-    send_event(state,
-	       enif_make_tuple2(state->send_env,
-				enif_make_atom(state->send_env, "xmlstreamerror"),
-				str2bin(state->send_env, "XML stanza is too big")));
+    send_error(state, str2bin(state->send_env, "XML stanza is too big"));
   } else {
     int res = XML_Parse(state->parser, (char *)bin.data, bin.size, 0);
     if (!res)
-      send_event(state,
-                 enif_make_tuple2(state->send_env,
-                                  enif_make_atom(state->send_env, "xmlstreamerror"),
-                                  state->error ?
-                                  str2bin(state->send_env, state->error) :
-                                  make_parse_error(state->send_env, state->parser)));
+      send_error(state, state->error ?
+                        str2bin(state->send_env, state->error) :
+                        make_parse_error(state->send_env, state->parser));
   }
 
   return argv[0];
