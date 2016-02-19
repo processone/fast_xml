@@ -31,7 +31,7 @@
 -behaviour(gen_server).
 
 -export([new/1, new/2, parse/2, close/1,
-	 change_callback_pid/2, parse_element/1]).
+	 change_callback_pid/2, parse_element/1, memory_counter_nif/0]).
 
 %% Internal exports, call-back functions.
 -export([start_link/0, init/1, handle_call/3, handle_cast/2,
@@ -117,6 +117,9 @@ close(_State) ->
 -spec parse_element(iodata()) -> xmlel() |
                                  {error, parse_error} |
                                  {error, binary()}.
+
+memory_counter_nif() ->
+    erlang:nif_error(nif_not_loaded).
 
 parse_element(_Str) ->
     erlang:nif_error(nif_not_loaded).

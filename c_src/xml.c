@@ -24,6 +24,8 @@
 
 #define SSL40
 
+#include "counted_allocs.inc"
+
 #ifdef SSL40
 #define ENIF_ALLOC(SIZE) enif_alloc(SIZE)
 #define ENIF_FREE(PTR) enif_free(PTR)
@@ -75,7 +77,7 @@ static void destroy_buf(ErlNifEnv* env, struct buf *rbuf)
   };
 }
 
-inline void resize_buf(ErlNifEnv* env, struct buf *rbuf, int len_to_add)
+static void resize_buf(ErlNifEnv* env, struct buf *rbuf, int len_to_add)
 {
   int new_len = rbuf->len + len_to_add;
   
@@ -301,6 +303,15 @@ static ERL_NIF_TERM element_to_binary(ErlNifEnv* env, int argc,
   return element_to(env, argc, argv, 0);
 }
 
+static ERL_NIF_TERM memory_counter_nif(ErlNifEnv* env, int argc,
+                                       const ERL_NIF_TERM argv[])
+{
+  if (argc != 0)
+    return enif_make_badarg(env);
+
+  return enif_make_long(env, allocated_xml);
+}
+
 static ErlNifFunc nif_funcs[] =
   {
     /* Stupid Erlang bug with enif_make_string() is fixed
@@ -309,7 +320,8 @@ static ErlNifFunc nif_funcs[] =
 #ifdef SSL40
     {"element_to_string", 1, element_to_string},
 #endif
-    {"element_to_binary", 1, element_to_binary}
+    {"element_to_binary", 1, element_to_binary},
+    {"memory_counter_nif", 0, memory_counter_nif}
   };
 
 ERL_NIF_INIT(xml, nif_funcs, load, NULL, NULL, NULL)

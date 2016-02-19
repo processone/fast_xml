@@ -37,7 +37,8 @@
 	 get_tag_attr_s/2, get_subtag/2, get_subtags/2, get_subtag_cdata/2,
          get_subtag_with_xmlns/3, get_subtags_with_xmlns/3,
 	 append_subtags/2, get_path_s/2,
-	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
+	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1,
+	 memory_counter_nif/0]).
 
 %% Internal exports, call-back functions.
 -export([start_link/0, init/1, handle_call/3, handle_cast/2,
@@ -76,6 +77,10 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 terminate(_Reason, _State) ->
     ok.
+
+
+memory_counter_nif() ->
+    erlang:nif_error(nif_not_loaded).
 
 %%
 -spec(element_to_binary/1 ::

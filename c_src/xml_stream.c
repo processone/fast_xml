@@ -30,6 +30,8 @@
 
 #define ASSERT(x) if (!(x)) return 0
 
+#include "counted_allocs.inc"
+
 typedef struct attr_t {
   char *name;
   char *val;
@@ -617,13 +619,23 @@ static ERL_NIF_TERM new_nif(ErlNifEnv* env, int argc,
   return result;
 }
 
+static ERL_NIF_TERM memory_counter_nif(ErlNifEnv* env, int argc,
+                                       const ERL_NIF_TERM argv[])
+{
+  if (argc != 0)
+    return enif_make_badarg(env);
+
+  return enif_make_long(env, allocated_xml);
+}
+
 static ErlNifFunc nif_funcs[] =
   {
     {"new", 2, new_nif},
     {"parse", 2, parse_nif},
     {"parse_element", 1, parse_element_nif},
     {"close", 1, close_nif},
-    {"change_callback_pid", 2, change_callback_pid_nif}
+    {"change_callback_pid", 2, change_callback_pid_nif},
+    {"memory_counter_nif", 0, memory_counter_nif}
   };
 
 ERL_NIF_INIT(xml_stream, nif_funcs, load, NULL, NULL, NULL)

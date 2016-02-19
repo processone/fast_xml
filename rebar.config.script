@@ -16,12 +16,12 @@ Cfg = case file:consult("vars.config") of
 {cflags, CfgCFlags} = lists:keyfind(cflags, 1, Cfg),
 {ldflags, CfgLDFlags} = lists:keyfind(ldflags, 1, Cfg),
 
-NIFPortSpec = [{"priv/lib/xml.so", ["c_src/xml.c"]},
-               {"priv/lib/xml_stream.so", ["c_src/xml_stream.c"]}],
+NIFPortSpec = [{"priv/lib/xml.so", ["c_src/xml.c", "c_src/counted_allocs.c"]},
+               {"priv/lib/xml_stream.so", ["c_src/xml_stream.c", "c_src/counted_allocs.c"]}],
 
 Config = [{erl_opts, [debug_info, {src_dirs, [src]}]},
           {eunit_compile_opts, [{src_dirs, ["src", "test"]}]},
-          {port_env, [{"CFLAGS", CfgCFlags ++ " $CFLAGS -g -O2 -Wall"},
+          {port_env, [{"CFLAGS", CfgCFlags ++ " $CFLAGS -g -O2 -Wall -DCOUNTED_ALLOCS"},
                       {"LDFLAGS", CfgLDFlags ++ " $LDFLAGS -lexpat"}]},
           {port_specs, NIFPortSpec},
           {plugins, [rebar3_hex]}],
