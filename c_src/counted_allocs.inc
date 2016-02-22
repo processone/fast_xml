@@ -3,7 +3,7 @@ static volatile int64_t allocated_xml = 0;
 #ifdef COUNTED_ALLOCS
 
 static void *counted_alloc_xml(size_t size) {
-  int32_t *ptr = enif_alloc(4+size);
+  int32_t *ptr = malloc(4+size);
   if (!ptr)
     return ptr;
 
@@ -22,7 +22,7 @@ static void counted_free_xml(void *ptr) {
 
   __sync_fetch_and_sub(&allocated_xml, p[0]);
 
-  enif_free(p);
+  free(p);
 }
 
 static void *counted_realloc_xml(void *ptr, size_t size) {
@@ -31,7 +31,7 @@ static void *counted_realloc_xml(void *ptr, size_t size) {
 
   int32_t *p = ((int32_t*)ptr)-1;
   int32_t s = p[0];
-  int32_t *np = enif_realloc(p, size+4);
+  int32_t *np = realloc(p, size+4);
 
   if (!np) {
     __sync_fetch_and_sub(&allocated_xml, s);
