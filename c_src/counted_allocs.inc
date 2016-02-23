@@ -26,8 +26,9 @@ static void counted_free_xml(void *ptr) {
 }
 
 static void *counted_realloc_xml(void *ptr, size_t size) {
-  if (!ptr)
-    return ptr;
+  if (!ptr) {
+     return counted_alloc_xml(size);
+  }
 
   int32_t *p = ((int32_t*)ptr)-1;
   int32_t s = p[0];
