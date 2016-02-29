@@ -1,3 +1,8 @@
+# Version 1.1.6
+
+* Add missing Makefile.mix file in rebar hex.pm package description (Mickaël Rémond)
+* Make sure priv dir is created when building with mix and included in package dir list (Mickaël Rémond)
+
 # Version 1.1.4
 
 This is an Elixir friendly update:

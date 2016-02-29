@@ -23,14 +23,14 @@
 
 {application, fast_xml,
  [{description,  "Fast Expat-based Erlang / Elixir XML parsing library"},
-  {vsn,          "1.1.4"},
+  {vsn,          "1.1.6"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib]},
   {mod,          {fast_xml,[]}},
 
   %% hex.pm packaging:
-  {files, ["src/", "c_src/fxml.c", "c_src/fxml_stream.c", "include/", "mix.exs", "rebar.config", "rebar.config.script", "README.md", "LICENSE.txt"]},
+  {files, ["src/", "c_src/fxml.c", "c_src/fxml_stream.c", "include/", "priv", "mix.exs", "Makefile.mix", "rebar.config", "rebar.config.script", "README.md", "LICENSE.txt"]},
   {licenses, ["Apache 2.0"]},
   {maintainers, ["ProcessOne"]},
   {links, [{"Github", "https://github.com/processone/fast_xml"}]}]}.

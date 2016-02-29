@@ -23,9 +23,11 @@ fast_xml:
 	$(MIX) compile
 
 priv/lib/fxml_stream.so: c_src/fxml_stream.c
+        @mkdir -p priv/lib
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml_stream.c
 
 priv/lib/fxml.so: c_src/fxml.c
+        @mkdir -p priv/lib
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml.c
 
 clean:
