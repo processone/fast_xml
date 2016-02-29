@@ -1,3 +1,11 @@
+# Version 1.1.4
+
+This is an Elixir friendly update:
+
+* Add ability to return maps instead of xmlel record (Paweł Chmielowski)
+* Add ability to tell parser to return Elixir structs instead of records (Mickaël Rémond)
+* Add Elixir tests (Mickaël Rémond)
+
 # Version 1.1.3
 
 * Memory optimizations (Paweł Chmielowski)

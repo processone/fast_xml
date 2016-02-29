@@ -18,7 +18,7 @@ defmodule FastXML.Mixfile do
   def project do
     [ app: :fast_xml,
       description: "Fast Expat-based Erlang / Elixir XML parsing library",
-      version: "1.1.3",
+      version: "1.1.4",
       elixir: "~> 1.1",
       compilers: [:make, :elixir, :erlang, :app],
       aliases: aliases,
