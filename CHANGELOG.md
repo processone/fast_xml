@@ -1,3 +1,7 @@
+# Version 1.1.7
+
+* Fix indent issue in Mix Makefile (Mickaël Rémond)
+
 # Version 1.1.6
 
 * Add missing Makefile.mix file in rebar hex.pm package description (Mickaël Rémond)
