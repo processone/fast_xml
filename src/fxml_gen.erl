@@ -170,6 +170,8 @@ compile(TaggedElems, Forms, Path, Opts) ->
     FileName = filename:basename(Path),
     ModName = filename:rootname(FileName),
     DirName = filename:dirname(Path),
+    ErlDirName = proplists:get_value(erl_dir, Opts, DirName),
+    HrlDirName = proplists:get_value(hrl_dir, Opts, DirName),
     Types = get_types(TaggedElems),
     AST = lists:flatmap(
             fun({Tag, Elem}) ->
@@ -224,11 +226,11 @@ compile(TaggedElems, Forms, Path, Opts) ->
     Hdr = header(FileName),
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile, Exports|NewAST]),
     case file:write_file(
-           filename:join([DirName, ModName ++ ".erl"]),
+           filename:join([ErlDirName, ModName ++ ".erl"]),
            [erl_prettypr:format(ResultAST), io_lib:nl()]) of
         ok ->
             file:write_file(
-              filename:join([DirName, ModName ++ ".hrl"]),
+              filename:join([HrlDirName, ModName ++ ".hrl"]),
               [erl_prettypr:format(Hdr),
 	       RawAttributes,
 	       io_lib:nl(),
