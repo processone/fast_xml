@@ -6,7 +6,8 @@ c_src/*.gcno
 config.log
 config.status
 ebin
-priv/
+priv/lib/*.so
+priv/lib/*.dSYM
 .eunit
 _build
 vars.config

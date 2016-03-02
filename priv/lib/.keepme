@@ -1,0 +1,1 @@
+This make sure that mix detect that lib as a target when fast_xml is build as a dependency.

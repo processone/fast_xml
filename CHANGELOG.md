@@ -1,3 +1,7 @@
+# Version 1.1.8
+
+* Package priv/lib structure to make sure everything is properly build by mix (Mickaël Rémond)
+
 # Version 1.1.7
 
 * Fix indent issue in Mix Makefile (Mickaël Rémond)
