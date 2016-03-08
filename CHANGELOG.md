@@ -1,3 +1,7 @@
+# Version 1.1.9
+
+* Fix Linux build with Mix (Paweł Chmielowski)
+
 # Version 1.1.8
 
 * Package priv/lib structure to make sure everything is properly build by mix (Mickaël Rémond)
