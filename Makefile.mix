@@ -4,6 +4,7 @@ CFLAGS = -g -O2 -Wall
 #CFLAGS = -g -O3 -ansi -pedantic -Wall -Wextra -Wno-unused-parameter
 
 ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)
+ERL_INTERFACE_PATH = $(shell erl -eval 'io:format("~s", [code:lib_dir(erl_interface, lib)])' -s init stop -noshell)
 CFLAGS += -I$(ERLANG_PATH)
 LDFLAGS += -lexpat
 
@@ -13,6 +14,10 @@ ifneq ($(OS),Windows_NT)
 	ifeq ($(shell uname),Darwin)
 		LDFLAGS += -dynamiclib -undefined dynamic_lookup
 	endif
+
+        ifeq ($(shell uname),Linux)
+                LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
+        endif
 endif
 
 .PHONY: all fast_xml clean
