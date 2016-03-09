@@ -1,3 +1,8 @@
+# Version 1.1.10
+
+* Split build in two steps to fix link step on Ubuntu (Paweł Chmielowski - Mickaël Rémond)
+* Clean Makefile.mix to remove duplicated code (Paweł Chmielowski)
+
 # Version 1.1.9
 
 * Fix Linux build with Mix (Paweł Chmielowski)

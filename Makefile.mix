@@ -16,7 +16,7 @@ ifneq ($(OS),Windows_NT)
 	endif
 
         ifeq ($(shell uname),Linux)
-                LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
+		LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
         endif
 endif
 
@@ -27,13 +27,16 @@ all: fast_xml
 fast_xml:
 	$(MIX) compile
 
-priv/lib/fxml_stream.so: c_src/fxml_stream.c
-	@mkdir -p priv/lib
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml_stream.c
+c_src/%.o: c_src/%.c
+	$(CC) -c $(CFLAGS) -o $@ $<
 
-priv/lib/fxml.so: c_src/fxml.c
+priv/lib/%.so:
 	@mkdir -p priv/lib
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ c_src/fxml.c
+	$(CC) $< $(LDFLAGS) -o $@
+
+priv/lib/fxml_stream.so: c_src/fxml_stream.o
+
+priv/lib/fxml.so: c_src/fxml.o
 
 clean:
 	$(RM) priv/lib/fxml_stream.so
