@@ -1,3 +1,7 @@
+Version 1.1.11
+
+* Now properly includes Elixir lib/ directory in hex.pm package (Mickaël Rémond)
+
 # Version 1.1.10
 
 * Split build in two steps to fix link step on Ubuntu (Paweł Chmielowski - Mickaël Rémond)
