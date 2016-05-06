@@ -20,7 +20,7 @@ defmodule FastXML.Mixfile do
       description: "Fast Expat-based Erlang / Elixir XML parsing library",
       version: "1.1.11",
       elixir: "~> 1.2",
-      compilers: [:make] ++ Mix.compilers,
+      compilers: [:fastXML | Mix.compilers],
       aliases: aliases,
       deps: deps,
       package: package
@@ -29,8 +29,8 @@ defmodule FastXML.Mixfile do
 
   def application do
     [mod: {:fast_xml, []}]
-    end
-     
+  end
+
   defp package do
     [# These are the default files included in the package
      files: ["src", "lib", "c_src/*.c", "mix.exs", "rebar.config", "rebar.config.script", "Makefile.mix", "priv", "include", "README.md", "LICENSE.txt"],
@@ -39,7 +39,7 @@ defmodule FastXML.Mixfile do
      links: %{"GitHub" => "https://github.com/processone/fast_xml",
               "Docs" => "https://github.com/processone/fast_xml/blob/master/README.md"}]
   end
-     
+
   def deps do
     [{:p1_utils, "~> 1.0"},
      {:earmark, "~> 0.1", only: :dev},
@@ -49,15 +49,15 @@ defmodule FastXML.Mixfile do
 
   defp aliases do
     # Execute the usual mix clean and our Makefile clean task
-    [clean: ["clean", "clean.make"]]
+    [clean: ["clean", "clean.fastXML"]]
   end
 end
 
-# Define 
-defmodule Mix.Tasks.Compile.Make do
+# Define
+defmodule Mix.Tasks.Compile.FastXML do
   @shortdoc "Compiles helper in c_src"
 
-  # TODO refactor 
+  # TODO refactor
   def run(_) do
     if match? {:win32, _}, :os.type do
       {result, _error_code} = System.cmd("nmake", ["/F", "Makefile.mix", "priv\\lib\\fxml_stream.dll"], stderr_to_stdout: true)
@@ -70,17 +70,17 @@ defmodule Mix.Tasks.Compile.Make do
       {result, _error_code} = System.cmd("make", ["-f", "Makefile.mix", "priv/lib/fxml.so"], stderr_to_stdout: true)
       Mix.shell.info result
     end
-    :ok
+    Mix.Project.build_structure
   end
 end
- 
-defmodule Mix.Tasks.Clean.Make do
+
+defmodule Mix.Tasks.Clean.FastXML do
   @shortdoc "Cleans helper in c_src"
-  
+
   def run(_) do
     {result, _error_code} = System.cmd("make", ["-f", "Makefile.mix", "clean"], stderr_to_stdout: true)
     Mix.shell.info result
-    
+
     :ok
   end
 end
