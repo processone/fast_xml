@@ -28,7 +28,9 @@ defmodule FastXML.Mixfile do
   end
 
   def application do
-    [mod: {:fast_xml, []}]
+    [ mod: {:fast_xml, []},
+      applications: [:p1_utils]
+    ]
   end
 
   defp package do
