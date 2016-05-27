@@ -24,6 +24,7 @@
 -module(fxml_gen).
 
 -compile(debug_info).
+
 %% Generator API
 -export([compile/1, compile/2]).
 %% Runtime API
@@ -532,12 +533,16 @@ make_top_encoders(TaggedSpecs, Opts) ->
           fun({Tag, #elem{name = Name, xmlns = XMLNS,
 			  result = Result, attrs = Attrs}},
 	      {EncAcc, NSAcc, Seen}) ->
-                  NewResult = labels_to_underscores(Result),
+		  XMLNSLabel = case lists:keyfind(<<"xmlns">>, #attr.name, Attrs) of
+				   #attr{label = L, name = N} ->
+				       prepare_label(L, N);
+				   _ ->
+				       undefined
+			       end,
+                  EncodeResult = labels_to_underscores(Result),
+		  NSResult = labels_to_underscores(Result, [XMLNSLabel]),
                   Var = label_to_var(prepare_label(undefined, Name)),
-		  HasXMLNSAttr = lists:any(
-				   fun(#attr{name= <<"xmlns">>}) -> true;
-				      (_) -> false
-				   end, Attrs),
+		  HasXMLNSAttr = XMLNSLabel /= undefined,
                   try
                       [H|_]= tuple_to_list(Result),
                       true = is_atom(H),
@@ -550,7 +555,7 @@ make_top_encoders(TaggedSpecs, Opts) ->
                       XMLNSAttrs = if IgnoreXMLNS or HasXMLNSAttr
 				      or is_list(XMLNS) or IsDuplicated ->
                                            erl_syntax:list([]);
-                                      true ->
+				      true ->
                                            erl_syntax:list(
                                              [erl_syntax:tuple(
                                                 [abstract(<<"xmlns">>),
@@ -560,17 +565,23 @@ make_top_encoders(TaggedSpecs, Opts) ->
 			       EncAcc;
 			  true ->
 			       [erl_syntax:clause(
-				  [erl_syntax:match_expr(NewResult, Var)],
+				  [erl_syntax:match_expr(EncodeResult, Var)],
 				  none,
 				  [make_function_call(
 				     make_enc_fun_name([Tag]),
 				     [Var, XMLNSAttrs])])|EncAcc]
 		       end,
-		       if IgnoreXMLNS or is_list(XMLNS) or IsDuplicated ->
+		       if IgnoreXMLNS or IsDuplicated ->
+			       NSAcc;
+			  HasXMLNSAttr ->
+			       [erl_syntax:clause(
+				  [NSResult], none,
+				  [label_to_var(XMLNSLabel)])|NSAcc];
+			  is_list(XMLNS) ->
 			       NSAcc;
 			  true ->
 			       [erl_syntax:clause(
-				  [NewResult], none,
+				  [NSResult], none,
 				  [abstract(XMLNS)])|NSAcc]
 		       end,
 		       [Result|Seen]}
@@ -847,33 +858,25 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 	      IgnoreXMLNS = proplists:get_bool(ignore_xmlns, Opts),
               XMLNSs = lists:flatten([RefElem#elem.xmlns]),
 	      TopXMLNSs = lists:flatten([TopXMLNS]),
-	      HasCommonXMLNSs = not sets:is_disjoint(
-				      sets:from_list(XMLNSs),
-				      sets:from_list(TopXMLNSs)),
+	      CommonXMLNSs = sets:to_list(
+			       sets:intersection(
+				 sets:from_list(XMLNSs),
+				 sets:from_list(TopXMLNSs))),
+	      HasCommonXMLNSs = CommonXMLNSs /= [],
               XMLNSMatch = erl_syntax:match_expr(
                              erl_syntax:variable("_xmlns"),
                              make_function_call(
                                get_attr,
                                [abstract(<<"xmlns">>),
                                 erl_syntax:variable("_attrs")])),
-              IfGuard = case HasCommonXMLNSs of
-			    false ->
-                                erl_syntax:disjunction(
-				  [erl_syntax:infix_expr(
-				     erl_syntax:variable("_xmlns"),
-				     erl_syntax:operator("=="),
-				     abstract(NS)) || NS <- XMLNSs]);
-			    true ->
-				erl_syntax:disjunction(
-				  [erl_syntax:infix_expr(
-				     erl_syntax:variable("_xmlns"),
-				     erl_syntax:operator("=="),
-				     abstract(<<"">>)),
-				   erl_syntax:infix_expr(
-				     erl_syntax:variable("_xmlns"),
-				     erl_syntax:operator("=="),
-				     erl_syntax:variable("__TopXMLNS"))])
-			end,
+	      XMLNSComparison = [erl_syntax:infix_expr(
+				   erl_syntax:variable("_xmlns"),
+				   erl_syntax:operator("=="),
+				   abstract(NS)) || NS <- XMLNSs],
+	      TopXMLNSComparison = [erl_syntax:infix_expr(
+				      erl_syntax:variable("__TopXMLNS"),
+				      erl_syntax:operator("=="),
+				      abstract(NS)) || NS <- CommonXMLNSs],
 	      ElemVars = lists:map(
 			   fun({Labl, [#ref{max = 1}|_]})
 				 when Labl == Label, IgnoreXMLNS ->
@@ -953,11 +956,13 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
                             ++ SubElVars ++ XmlElVars])];
                     false ->
                         [XMLNSMatch,
-                         erl_syntax:if_expr(
+                         erl_syntax:case_expr(
+			   erl_syntax:variable("_xmlns"),
 			   case HasCommonXMLNSs of
 			       true ->
 				   [erl_syntax:clause(
-				      [], IfGuard,
+				      [abstract(<<"">>)],
+				      erl_syntax:disjunction(TopXMLNSComparison),
 				      [make_function_call(
 					 FunName,
 					 [erl_syntax:variable("__TopXMLNS"),
@@ -965,17 +970,20 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 					  _ElsVar|CDataVars ++ NewElemVars("__TopXMLNS")
 					  ++ SubElVars ++ XmlElVars])])];
 			       false ->
-				   [erl_syntax:clause(
-				      [], IfGuard,
-				      [make_function_call(
-					 FunName,
-					 [erl_syntax:variable("__TopXMLNS"),
-					  erl_syntax:variable("__IgnoreEls"),
-					  _ElsVar|CDataVars ++ NewElemVars("_xmlns")
-					  ++ SubElVars ++ XmlElVars])])]
+				   []
 			   end ++
 			       [erl_syntax:clause(
-				  [], none,
+				  [erl_syntax:underscore()],
+				  erl_syntax:disjunction(XMLNSComparison),
+				  [make_function_call(
+				     FunName,
+				     [erl_syntax:variable("__TopXMLNS"),
+				      erl_syntax:variable("__IgnoreEls"),
+				      _ElsVar|CDataVars ++ NewElemVars("_xmlns")
+				      ++ SubElVars ++ XmlElVars])])]
+			   ++
+			       [erl_syntax:clause(
+				  [erl_syntax:underscore()], none,
 				  [make_function_call(
 				     FunName,
 				     [erl_syntax:variable("__TopXMLNS"),
@@ -1320,13 +1328,14 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                     fun(#ref{name = RefName, max = 1}) ->
                             RefElem = get_elem_by_ref(RefName, AllElems),
                             XMLNS = RefElem#elem.xmlns,
-                            XMLNSAttrs = if TopXMLNS == XMLNS ->
+                            XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
+					     true ->
                                                  erl_syntax:list([]);
-                                            true ->
+					     {false, NS} ->
                                                  erl_syntax:list(
                                                    [erl_syntax:tuple(
                                                       [abstract(<<"xmlns">>),
-                                                       abstract(XMLNS)])])
+                                                       abstract(NS)])])
                                          end,
                             Pattern =
                                 if length(Refs) > 1 ->
@@ -1349,13 +1358,14 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                        (#ref{name = RefName}) ->
                             RefElem = get_elem_by_ref(RefName, AllElems),
                             XMLNS = RefElem#elem.xmlns,
-                            XMLNSAttrs = if TopXMLNS == XMLNS ->
+                            XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
+					     true ->
                                                  erl_syntax:list([]);
-                                            true ->
+					     {false, NS} ->
                                                  erl_syntax:list(
                                                    [erl_syntax:tuple(
                                                       [abstract(<<"xmlns">>),
-                                                       abstract(XMLNS)])])
+                                                       abstract(NS)])])
                                          end,
                             Pattern =
                                 if length(Refs) > 1 ->
@@ -1629,6 +1639,20 @@ abstract(Bin) when is_binary(Bin) ->
 abstract(Term) ->
     erl_syntax:abstract(Term).
 
+is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(XMLNS), is_list(TopXMLNS) ->
+    case sets:is_disjoint(sets:from_list(XMLNS), sets:from_list(TopXMLNS)) of
+	true ->
+	    {false, hd(XMLNS)};
+	false ->
+	    true
+    end;
+is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(XMLNS) ->
+    is_my_top_xmlns(XMLNS, [TopXMLNS]);
+is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(TopXMLNS) ->
+    is_my_top_xmlns([XMLNS], TopXMLNS);
+is_my_top_xmlns(XMLNS, TopXMLNS) ->
+    is_my_top_xmlns([XMLNS], [TopXMLNS]).
+
 label_to_var(Label) ->
     case atom_to_list(Label) of
         [$$,$_|[H|T]] ->
@@ -1684,12 +1708,20 @@ tuple_or_single_var([_|_] = Vars) ->
     erl_syntax:tuple(Vars).
 
 labels_to_underscores(Term) ->
+    labels_to_underscores(Term, []).
+
+labels_to_underscores(Term, Except) ->
     erl_syntax_lib:map(
       fun(T) ->
               try
                   Label = erl_syntax:atom_value(T),
                   true = is_label(Label),
-                  erl_syntax:underscore()
+		  case lists:member(Label, Except) of
+		      true ->
+			  label_to_var(Label);
+		      false ->
+			  erl_syntax:underscore()
+		  end
               catch _:_ ->
                       T
               end
