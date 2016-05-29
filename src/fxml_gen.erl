@@ -24,7 +24,7 @@
 -module(fxml_gen).
 
 -compile(debug_info).
-
+-compile({parse_transform, fxml_gen_pt}).
 %% Generator API
 -export([compile/1, compile/2]).
 %% Runtime API
@@ -180,8 +180,8 @@ compile(TaggedElems, Forms, Path, Opts) ->
                     elem_to_AST(Elem1, Tag, TaggedElems, Types, ModName, Opts)
             end, TaggedElems),
     Module = erl_syntax:attribute(
-               erl_syntax:atom("module"),
-               [erl_syntax:atom(list_to_atom(ModName))]),
+               ?AST(module),
+               [erl_syntax:atom(ModName)]),
     Decoders = make_top_decoders(TaggedElems, ModName, Opts),
     Encoders = make_top_encoders(TaggedElems, Opts),
     AuxFuns = make_aux_funs(),
@@ -200,7 +200,7 @@ compile(TaggedElems, Forms, Path, Opts) ->
     Records = make_records(Types, TaggedElems, PredefRecords, Opts),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
-                erl_syntax:atom("export"),
+                ?AST(export),
                 [erl_syntax:list(
                    lists:map(
                      fun({FN, Arity}) ->
@@ -215,8 +215,8 @@ compile(TaggedElems, Forms, Path, Opts) ->
                      end, [hd(Printer), {format_error, 1}
                            |Decoders ++ Encoders]))]),
     Compile = erl_syntax:attribute(
-                erl_syntax:atom("compile"),
-                [erl_syntax:abstract(
+                ?AST(compile),
+                [?AST(
                    {nowarn_unused_function,
                     [{dec_int, 3},
                      {dec_int, 1},
@@ -368,62 +368,48 @@ make_top_decoders(TaggedSpecs, ModName, Opts) when is_list(Opts) ->
     IgnoreXMLNS = proplists:get_bool(ignore_xmlns, Opts),
     make_top_decoders(TaggedSpecs, ModName, IgnoreXMLNS);
 make_top_decoders(TaggedSpecs, ModName, true) ->
-    C0 = erl_syntax:match_expr(
-	   erl_syntax:variable("IgnoreEls"),
-	   make_function_call(
-	     proplists, get_bool,
-	     [erl_syntax:atom("ignore_els"),
-	      erl_syntax:variable("Opts")])),
+    C0 = ?AST(IgnoreEls = proplists:get_bool(ignore_els, Opts)),
     C1 = lists:map(
            fun({Tag, #elem{name = Name}}) ->
                    erl_syntax:clause(
-                     [erl_syntax:tuple([erl_syntax:atom("xmlel"),
+                     [erl_syntax:tuple([?AST(xmlel),
 					abstract(Name),
-					erl_syntax:underscore(),
-					erl_syntax:underscore()])],
+					?AST(_),
+					?AST(_)])],
                      none,
                      [make_function_call(
                         make_dec_fun_name([Tag]),
-                        [abstract(<<>>),
-			 erl_syntax:variable("IgnoreEls"),
-			 erl_syntax:variable("_el")])])
+                        [?AST(<<>>), ?AST(IgnoreEls), ?AST(_el)])])
            end, TaggedSpecs),
     C2 = lists:map(
            fun({_Tag, #elem{name = Name}}) ->
                    erl_syntax:clause(
-                     [erl_syntax:tuple([erl_syntax:atom("xmlel"),
+                     [erl_syntax:tuple([?AST(xmlel),
                                         abstract(Name),
-                                        erl_syntax:underscore(),
-                                        erl_syntax:underscore()])],
+                                        ?AST(_),
+                                        ?AST(_)])],
                      none,
-                     [erl_syntax:atom(true)])
+                     [?AST(true)])
            end, TaggedSpecs),
     NilClause1 = erl_syntax:clause(
-                   [erl_syntax:tuple([erl_syntax:atom("xmlel"),
-                                      erl_syntax:variable("_name"),
-                                      erl_syntax:underscore(),
-                                      erl_syntax:underscore()])],
+                   [?AST({xmlel, _name, _, _})],
                    none,
                    [make_erlang_error(
                       ModName,
-                      erl_syntax:tuple(
-                        [erl_syntax:atom("unknown_tag"),
-                         erl_syntax:variable("_name"),
-                         abstract(<<>>)]))]),
+		      ?AST({unknown_tag, _name, <<>>}))]),
     NilClause2 = erl_syntax:clause(
-                   [erl_syntax:underscore()], none, [abstract(true)]),
+                   [?AST(_)], none, [?AST(true)]),
     [make_function(
        "decode",
-       [erl_syntax:variable("_el")],
-       [make_function_call(
-	  "decode", [erl_syntax:variable("_el"), erl_syntax:list([])])]),
+       [?AST(_el)],
+       [?AST(decode(_el, []))]),
      make_function("decode",
-		   [erl_syntax:variable("_el"), erl_syntax:variable("Opts")],
+		   [?AST(_el), ?AST(Opts)],
 		   [C0,
 		    erl_syntax:case_expr(
-		      erl_syntax:variable("_el"),
+		      ?AST(_el),
 		      C1 ++ [NilClause1])]),
-     erl_syntax:function(erl_syntax:atom("is_known_tag"), C2 ++ [NilClause2])];
+     erl_syntax:function(?AST(is_known_tag), C2 ++ [NilClause2])];
 make_top_decoders(TaggedSpecs1, ModName, false) ->
     TaggedSpecs = lists:flatmap(
 		    fun({Tag, #elem{xmlns = XMLNSs} = E}) when is_list(XMLNSs) ->
@@ -431,12 +417,7 @@ make_top_decoders(TaggedSpecs1, ModName, false) ->
 		       (TE) ->
 			    [TE]
 		    end, TaggedSpecs1),
-    C0 = erl_syntax:match_expr(
-	   erl_syntax:variable("IgnoreEls"),
-	   make_function_call(
-	     proplists, get_bool,
-	     [erl_syntax:atom("ignore_els"),
-	      erl_syntax:variable("Opts")])),
+    C0 = ?AST(IgnoreEls = proplists:get_bool(ignore_els, Opts)),
     C1 = lists:map(
            fun({Tag, #elem{xmlns = XMLNS, name = Name}}) ->
                    erl_syntax:clause(
@@ -447,8 +428,8 @@ make_top_decoders(TaggedSpecs1, ModName, false) ->
                      [make_function_call(
                         make_dec_fun_name([Tag]),
                         [abstract(XMLNS),
-			 erl_syntax:variable("IgnoreEls"),
-			 erl_syntax:variable("_el")])])
+			 ?AST(IgnoreEls),
+			 ?AST(_el)])])
            end, TaggedSpecs),
     C2 = lists:map(
            fun({_Tag, #elem{xmlns = XMLNS, name = Name}}) ->
@@ -457,59 +438,32 @@ make_top_decoders(TaggedSpecs1, ModName, false) ->
                         [abstract(Name),
                          abstract(XMLNS)])],
                      none,
-                     [erl_syntax:atom("true")])
+                     [?AST(true)])
            end, TaggedSpecs),
     NilClause = erl_syntax:clause(
-                  [erl_syntax:tuple(
-                     [erl_syntax:variable("_name"),
-                      erl_syntax:variable("_xmlns")])],
+                  [?AST({_name, _xmlns})],
                   none,
                   [make_erlang_error(
                      ModName,
-                     erl_syntax:tuple(
-                       [erl_syntax:atom("unknown_tag"),
-                        erl_syntax:variable("_name"),
-                        erl_syntax:variable("_xmlns")]))]),
+		     ?AST({unknown_tag, _name, _xmlns}))]),
     [make_function(
        "decode",
-       [erl_syntax:variable("_el")],
-       [make_function_call(
-	  "decode", [erl_syntax:variable("_el"), erl_syntax:list([])])]),
+       [?AST(_el)],
+       [?AST(decode(_el, []))]),
      make_function(
        "decode",
-       [erl_syntax:match_expr(
-          erl_syntax:tuple([erl_syntax:atom("xmlel"),
-                            erl_syntax:variable("_name"),
-                            erl_syntax:variable("_attrs"),
-                            erl_syntax:underscore()]),
-          erl_syntax:variable("_el")),
-	erl_syntax:variable("Opts")],
+       [?AST({xmlel, _name, _attrs, _} = _el), ?AST(Opts)],
        [C0,
 	erl_syntax:case_expr(
-          erl_syntax:tuple(
-            [erl_syntax:variable("_name"),
-             make_function_call(
-               get_attr,
-               [abstract(<<"xmlns">>),
-                erl_syntax:variable("_attrs")])]),
+	  ?AST({_name, get_attr(<<"xmlns">>, _attrs)}),
           C1 ++ [NilClause])]),
      make_function(
        "is_known_tag",
-       [erl_syntax:match_expr(
-          erl_syntax:tuple([erl_syntax:atom("xmlel"),
-                            erl_syntax:variable("_name"),
-                            erl_syntax:variable("_attrs"),
-                            erl_syntax:underscore()]),
-          erl_syntax:variable("_el"))],
+       [?AST({xmlel, _name, _attrs, _} = _el)],
        [erl_syntax:case_expr(
-          erl_syntax:tuple(
-            [erl_syntax:variable("_name"),
-             make_function_call(
-               get_attr,
-               [abstract(<<"xmlns">>),
-                erl_syntax:variable("_attrs")])]),
+	  ?AST({_name, get_attr(<<"xmlns">>, _attrs)}),
           C2 ++ [erl_syntax:clause(
-                   [erl_syntax:underscore()], none, [abstract(false)])])])].
+                   [?AST(_)], none, [?AST(false)])])])].
 
 make_top_encoders(TaggedSpecs, Opts) ->
     IgnoreXMLNS = proplists:get_bool(ignore_xmlns, Opts),
@@ -527,7 +481,7 @@ make_top_encoders(TaggedSpecs, Opts) ->
 		  end
 	  end, {dict:new(), dict:new()}, TaggedSpecs),
     NilNSClause = erl_syntax:clause(
-		    [erl_syntax:underscore()], none, [abstract(<<"">>)]),
+		    [?AST(_)], none, [?AST(<<"">>)]),
     {EncClauses, NSClauses, _} =
         lists:foldl(
           fun({Tag, #elem{name = Name, xmlns = XMLNS,
@@ -554,11 +508,11 @@ make_top_encoders(TaggedSpecs, Opts) ->
 		      AlreadySeen = lists:member(Result, Seen),
                       XMLNSAttrs = if IgnoreXMLNS or HasXMLNSAttr
 				      or is_list(XMLNS) or IsDuplicated ->
-                                           erl_syntax:list([]);
+                                           ?AST([]);
 				      true ->
                                            erl_syntax:list(
                                              [erl_syntax:tuple(
-                                                [abstract(<<"xmlns">>),
+                                                [?AST(<<"xmlns">>),
                                                  abstract(XMLNS)])])
                                    end,
                       {if AlreadySeen ->
@@ -590,24 +544,17 @@ make_top_encoders(TaggedSpecs, Opts) ->
                   end
           end, {[], [NilNSClause], []}, TaggedSpecs),
     XmlElClause = erl_syntax:clause(
-		    [erl_syntax:match_expr(
-		       erl_syntax:tuple(
-			 [erl_syntax:atom("xmlel"),
-			  erl_syntax:underscore(),
-			  erl_syntax:underscore(),
-			  erl_syntax:underscore()]),
-		       erl_syntax:variable("El"))],
+		    [?AST({xmlel, _, _, _} = El)],
 		    none,
-		    [erl_syntax:variable("El")]),
-    [erl_syntax:function(erl_syntax:atom("encode"), [XmlElClause|EncClauses]),
-     erl_syntax:function(erl_syntax:atom("get_ns"), NSClauses)].
+		    [?AST(El)]),
+    [erl_syntax:function(?AST(encode), [XmlElClause|EncClauses]),
+     erl_syntax:function(?AST(get_ns), NSClauses)].
 
 make_printer(TaggedSpecs, PredefRecords) ->
     PassClause = erl_syntax:clause(
-                   [erl_syntax:underscore(),
-                    erl_syntax:underscore()],
+                   [?AST(_), ?AST(_)],
                    none,
-                   [erl_syntax:atom("no")]),
+                   [?AST(no)]),
     %% Exclude tags with duplicated results
     RecNames = lists:foldl(
                  fun({Tag, #elem{result = Result}}, Acc) ->
@@ -646,14 +593,9 @@ make_printer(TaggedSpecs, PredefRecords) ->
           end, [PassClause], TaggedSpecs),
     [make_function(
        "pp",
-       [erl_syntax:variable("Term")],
-       [make_function_call(
-          io_lib_pretty, print,
-          [erl_syntax:variable("Term"),
-           erl_syntax:implicit_fun(
-             erl_syntax:atom("pp"),
-             abstract(2))])]),
-     erl_syntax:function(erl_syntax:atom("pp"), Clauses)].
+       [?AST(Term)],
+       [?AST(io_lib_pretty:print(Term, fun pp/2))]),
+     erl_syntax:function(?AST(pp), Clauses)].
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem,
@@ -786,11 +728,11 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs,
                 AttrPattern = tuple_or_single_var(AttrVars),
                 AttrCall = make_function_call(
                              FunName ++ "_attrs",
-                             [erl_syntax:variable("__TopXMLNS"),
-			      erl_syntax:variable("_attrs")|
+                             [?AST(__TopXMLNS),
+			      ?AST(_attrs)|
                               lists:map(
                                 fun(_) ->
-                                        erl_syntax:atom(undefined)
+                                        ?AST(undefined)
                                 end, Attrs)]),
                 [erl_syntax:match_expr(AttrPattern, AttrCall)];
            true ->
@@ -805,30 +747,30 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs,
                    tuple_or_single_var(CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars),
                    make_function_call(
                      FunName ++ "_els",
-                     [erl_syntax:variable("__TopXMLNS"),
-		      erl_syntax:variable("__IgnoreEls"),
-		      erl_syntax:variable("_els")|
+                     [?AST(__TopXMLNS),
+		      ?AST(__IgnoreEls),
+		      ?AST(_els)|
                       lists:flatmap(
                         fun({_, [#ref{min = 0, max = 1, default = Def}|_]}) ->
                                 [abstract(Def)];
                            ({_, [#ref{min = 1, max = 1}|_]}) ->
-                                [erl_syntax:atom("error")];
+                                [?AST(error)];
                            (#cdata{}) when HaveCData ->
-                                [abstract(<<>>)];
+                                [?AST(<<>>)];
                            (#cdata{}) ->
                                 [];
                            (_) ->
-                                [erl_syntax:list([])]
+                                [?AST([])]
                         end, [CData|group_refs(Refs)] ++ SubElVars ++ XmlElVars)]))]
         end,
     [make_function(
        FunName,
-       [erl_syntax:variable("__TopXMLNS"),
-	erl_syntax:variable("__IgnoreEls"),
-	erl_syntax:tuple([erl_syntax:atom("xmlel"),
+       [?AST(__TopXMLNS),
+	?AST(__IgnoreEls),
+	erl_syntax:tuple([?AST(xmlel),
                           abstract(Name),
-                          erl_syntax:variable("_attrs"),
-                          erl_syntax:variable("_els")])],
+                          ?AST(_attrs),
+                          ?AST(_els)])],
        ElCDataMatch ++ AttrMatch ++ [ResultWithVars])]
         ++ make_els_dec_fun(FunName ++ "_els", CData, HaveCData, SubElVars,
                             XmlElVars, Refs, Tag, XMLNS, AllElems,
@@ -849,7 +791,6 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
                     false ->
                         []
                 end,
-    _ElsVar = erl_syntax:variable("_els"),
     lists:map(
       fun(#ref{name = RefName, label = RefLabel}) ->
               Label = prepare_label(RefLabel, RefName),
@@ -863,24 +804,19 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 				 sets:from_list(XMLNSs),
 				 sets:from_list(TopXMLNSs))),
 	      HasCommonXMLNSs = CommonXMLNSs /= [],
-              XMLNSMatch = erl_syntax:match_expr(
-                             erl_syntax:variable("_xmlns"),
-                             make_function_call(
-                               get_attr,
-                               [abstract(<<"xmlns">>),
-                                erl_syntax:variable("_attrs")])),
+              XMLNSMatch = ?AST(_xmlns = get_attr(<<"xmlns">>, _attrs)),
 	      XMLNSComparison = [erl_syntax:infix_expr(
-				   erl_syntax:variable("_xmlns"),
+				   ?AST(_xmlns),
 				   erl_syntax:operator("=="),
 				   abstract(NS)) || NS <- XMLNSs],
 	      TopXMLNSComparison = [erl_syntax:infix_expr(
-				      erl_syntax:variable("__TopXMLNS"),
+				      ?AST(__TopXMLNS),
 				      erl_syntax:operator("=="),
 				      abstract(NS)) || NS <- CommonXMLNSs],
 	      ElemVars = lists:map(
 			   fun({Labl, [#ref{max = 1}|_]})
 				 when Labl == Label, IgnoreXMLNS ->
-				   erl_syntax:underscore();
+				   ?AST(_);
 			      ({Labl, _}) ->
 				   label_to_var(Labl)
 			   end, group_refs(Refs)),
@@ -892,13 +828,13 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 				    Call = make_function_call(
 					     make_dec_fun_name([RefName]),
 					     [erl_syntax:variable(NS),
-					      erl_syntax:variable("__IgnoreEls"),
-					      erl_syntax:variable("_el")]),
+					      ?AST(__IgnoreEls),
+					      ?AST(_el)]),
 				    if Min == 0 ->
 					    Call;
 				       Min == 1 ->
 					    erl_syntax:tuple(
-					      [erl_syntax:atom("value"),
+					      [?AST(value),
 					       Call])
 				    end;
 			       ({L, [#ref{default = Def}]}) when L == Label ->
@@ -909,23 +845,23 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 					      make_function_call(
 						make_dec_fun_name([RefName]),
 						[erl_syntax:variable(NS),
-						 erl_syntax:variable("__IgnoreEls"),
-						 erl_syntax:variable("_el")]),
+						 ?AST(__IgnoreEls),
+						 ?AST(_el)]),
 					      [erl_syntax:clause(
 						 [abstract(Def)], none, [Var]),
 					       erl_syntax:clause(
-						 [erl_syntax:variable("_new_el")],
+						 [?AST(_new_el)],
 						 none,
 						 [erl_syntax:list(
-						    [erl_syntax:variable("_new_el")],
+						    [?AST(_new_el)],
 						    Var)])]);
 					false ->
 					    erl_syntax:list(
 					      [make_function_call(
 						 make_dec_fun_name([RefName]),
 						 [erl_syntax:variable(NS),
-						  erl_syntax:variable("__IgnoreEls"),
-						  erl_syntax:variable("_el")])],
+						  ?AST(__IgnoreEls),
+						  ?AST(_el)])],
 					      Var)
 				    end;
 			       ({L, _}) ->
@@ -933,62 +869,62 @@ make_els_dec_clause(FunName, CDataVars, Refs, TopXMLNS, AllElems,
 			    end, group_refs(Refs))
 		  end,
               erl_syntax:clause(
-                [erl_syntax:variable("__TopXMLNS"),
-		 erl_syntax:variable("__IgnoreEls"),
+                [?AST(__TopXMLNS),
+		 ?AST(__IgnoreEls),
 		 erl_syntax:list(
                    [erl_syntax:match_expr(
                       erl_syntax:tuple(
-                        [erl_syntax:atom("xmlel"),
+                        [?AST(xmlel),
                          abstract(RefElem#elem.name),
-                         erl_syntax:variable("_attrs"),
-                         erl_syntax:underscore()]),
-                      erl_syntax:variable("_el"))],
-                   erl_syntax:variable("_els"))|
+                         ?AST(_attrs),
+                         ?AST(_)]),
+                      ?AST(_el))],
+                   ?AST(_els))|
                  CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
                 none,
                 case IgnoreXMLNS of
                     true ->
                         [make_function_call(
                            FunName,
-                           [erl_syntax:variable("__TopXMLNS"),
-			    erl_syntax:variable("__IgnoreEls"),
-			    _ElsVar|CDataVars ++ NewElemVars("__TopXMLNS")
+                           [?AST(__TopXMLNS),
+			    ?AST(__IgnoreEls),
+			    ?AST(_els)|CDataVars ++ NewElemVars("__TopXMLNS")
                             ++ SubElVars ++ XmlElVars])];
                     false ->
                         [XMLNSMatch,
                          erl_syntax:case_expr(
-			   erl_syntax:variable("_xmlns"),
+			   ?AST(_xmlns),
 			   case HasCommonXMLNSs of
 			       true ->
 				   [erl_syntax:clause(
-				      [abstract(<<"">>)],
+				      [?AST(<<"">>)],
 				      erl_syntax:disjunction(TopXMLNSComparison),
 				      [make_function_call(
 					 FunName,
-					 [erl_syntax:variable("__TopXMLNS"),
-					  erl_syntax:variable("__IgnoreEls"),
-					  _ElsVar|CDataVars ++ NewElemVars("__TopXMLNS")
+					 [?AST(__TopXMLNS),
+					  ?AST(__IgnoreEls),
+					  ?AST(_els)|CDataVars ++ NewElemVars("__TopXMLNS")
 					  ++ SubElVars ++ XmlElVars])])];
 			       false ->
 				   []
 			   end ++
 			       [erl_syntax:clause(
-				  [erl_syntax:underscore()],
+				  [?AST(_)],
 				  erl_syntax:disjunction(XMLNSComparison),
 				  [make_function_call(
 				     FunName,
-				     [erl_syntax:variable("__TopXMLNS"),
-				      erl_syntax:variable("__IgnoreEls"),
-				      _ElsVar|CDataVars ++ NewElemVars("_xmlns")
+				     [?AST(__TopXMLNS),
+				      ?AST(__IgnoreEls),
+				      ?AST(_els)|CDataVars ++ NewElemVars("_xmlns")
 				      ++ SubElVars ++ XmlElVars])])]
 			   ++
 			       [erl_syntax:clause(
-				  [erl_syntax:underscore()], none,
+				  [?AST(_)], none,
 				  [make_function_call(
 				     FunName,
-				     [erl_syntax:variable("__TopXMLNS"),
-				      erl_syntax:variable("__IgnoreEls"),
-				      _ElsVar|CDataVars ++ ElemVars
+				     [?AST(__TopXMLNS),
+				      ?AST(__IgnoreEls),
+				      ?AST(_els)|CDataVars ++ ElemVars
 				      ++ SubElVars ++ XmlElVars])])])]
 		end)
       end, Refs).
@@ -1007,34 +943,31 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
                  fun({Label, _}) ->
                          label_to_var(Label)
                  end, group_refs(Refs)),
-    _ElsVar = erl_syntax:variable("_els"),
     ResultCData = if HaveCData ->
                           [erl_syntax:binary(
                              [erl_syntax:binary_field(
                                 hd(CDataVars),
-                                [erl_syntax:atom("binary")]),
+                                [?AST(binary)]),
                               erl_syntax:binary_field(
-                                erl_syntax:variable("_data"),
-                                [erl_syntax:atom("binary")])])];
+                                ?AST(_data),
+                                [?AST(binary)])])];
                      true ->
                           []
                   end,
     CDataClause = if HaveCData ->
                           [erl_syntax:clause(
-                             [erl_syntax:variable("__TopXMLNS"),
-			      erl_syntax:variable("__IgnoreEls"),
+                             [?AST(__TopXMLNS),
+			      ?AST(__IgnoreEls),
 			      erl_syntax:list(
-                                [erl_syntax:tuple(
-                                   [erl_syntax:atom("xmlcdata"),
-                                    erl_syntax:variable("_data")])],
-                                _ElsVar)
+                                [?AST({xmlcdata, _data})],
+                                ?AST(_els))
                               |CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
                              none,
                              [make_function_call(
                                 FunName,
-                                [erl_syntax:variable("__TopXMLNS"),
-				 erl_syntax:variable("__IgnoreEls"),
-				 erl_syntax:variable("_els")|
+                                [?AST(__TopXMLNS),
+				 ?AST(__IgnoreEls),
+				 ?AST(_els)|
                                  ResultCData ++ ElemVars ++ SubElVars ++ XmlElVars])])];
                      true ->
                           []
@@ -1051,17 +984,17 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
                             erl_syntax:case_expr(
                               label_to_var(L),
                               [erl_syntax:clause(
-                                 [erl_syntax:atom(error)],
+                                 [?AST(error)],
                                  none,
                                  [make_erlang_error(
                                     ModName,
                                     erl_syntax:tuple(
-                                      [erl_syntax:atom("missing_tag"),
+                                      [?AST(missing_tag),
                                        abstract(RefElem#elem.name),
-                                       erl_syntax:variable("__TopXMLNS")]))]),
+                                       ?AST(__TopXMLNS)]))]),
                                erl_syntax:clause(
                                  [erl_syntax:tuple(
-                                    [erl_syntax:atom("value"),
+                                    [?AST(value),
                                      label_to_var(L1)])],
                                  none,
                                  [label_to_var(L1)])]);
@@ -1072,7 +1005,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
     CDataCall = if HaveCData ->
                         [make_function_call(
                            make_dec_fun_name([cdata,Tag]),
-			   [erl_syntax:variable("__TopXMLNS")|CDataVars])];
+			   [?AST(__TopXMLNS)|CDataVars])];
                    true ->
                         []
                 end,
@@ -1093,9 +1026,9 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
                           []
                   end,
     NilClause = erl_syntax:clause(
-                  [erl_syntax:variable("__TopXMLNS"),
-		   erl_syntax:variable("__IgnoreEls"),
-		   erl_syntax:list([])|
+                  [?AST(__TopXMLNS),
+		   ?AST(__IgnoreEls),
+		   ?AST([])|
                    CDataVars ++
                        lists:map(
                          fun({L, _}) ->
@@ -1104,17 +1037,11 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
                   none,
                   [tuple_or_single_var(
                      CDataCall ++ ResultElems ++ SubElResult ++ XmlElResult)]),
-    SubElPattern = [erl_syntax:variable("__TopXMLNS"),
-		    erl_syntax:variable("__IgnoreEls"),
+    SubElPattern = [?AST(__TopXMLNS),
+		    ?AST(__IgnoreEls),
 		    erl_syntax:list(
-                      [erl_syntax:match_expr(
-                         erl_syntax:tuple(
-                           [erl_syntax:atom("xmlel"),
-                            erl_syntax:underscore(),
-                            erl_syntax:underscore(),
-                            erl_syntax:underscore()]),
-                         erl_syntax:variable("_el"))],
-                      _ElsVar)
+                      [?AST({xmlel, _, _, _} = _el)],
+                      ?AST(_els))
                     |CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
     SubElClause =
         case {have_label(Result, '$_els'),
@@ -1123,99 +1050,91 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
                 SubElBody = erl_syntax:if_expr(
 			      [erl_syntax:clause(
 				 [],
-				 [erl_syntax:variable("__IgnoreEls")],
+				 [?AST(__IgnoreEls)],
 				 [make_function_call(
                                     FunName,
-                                    [erl_syntax:variable("__TopXMLNS"),
-				     erl_syntax:variable("__IgnoreEls"),
-				     _ElsVar|CDataVars ++ ElemVars] ++
+                                    [?AST(__TopXMLNS),
+				     ?AST(__IgnoreEls),
+				     ?AST(_els)|CDataVars ++ ElemVars] ++
                                         [erl_syntax:list(
-					   [erl_syntax:variable("_el")],
+					   [?AST(_el)],
                                            label_to_var('$_els'))])]),
 			       erl_syntax:clause(
 				 [], none,
 				 [erl_syntax:case_expr(
-				    make_function_call(
-				     is_known_tag,
-				     [erl_syntax:variable("_el")]),
+				    ?AST(is_known_tag(_el)),
 				   [erl_syntax:clause(
-				      [erl_syntax:atom("true")],
+				      [?AST(true)],
 				      none,
 				      [make_function_call(
 					 FunName,
-					 [erl_syntax:variable("__TopXMLNS"),
-					  erl_syntax:variable("__IgnoreEls"),
-					  _ElsVar|CDataVars ++ ElemVars] ++
+					 [?AST(__TopXMLNS),
+					  ?AST(__IgnoreEls),
+					  ?AST(_els)|CDataVars ++ ElemVars] ++
 					     [erl_syntax:list(
-						[make_function_call(
-						   "decode",
-						   [erl_syntax:variable("_el")])],
+						[?AST(decode(_el))],
 						label_to_var('$_els'))])]),
 				    erl_syntax:clause(
-				      [erl_syntax:atom("false")],
+				      [?AST(false)],
 				      none,
 				      [make_function_call(
 					 FunName,
-					 [erl_syntax:variable("__TopXMLNS"),
-					  erl_syntax:variable("__IgnoreEls"),
-					  _ElsVar|CDataVars ++ ElemVars] ++
+					 [?AST(__TopXMLNS),
+					  ?AST(__IgnoreEls),
+					  ?AST(_els)|CDataVars ++ ElemVars] ++
 					     [label_to_var('$_els')])])])])]),
                 [erl_syntax:clause(SubElPattern, none, [SubElBody])];
             {false, true} ->
                 SubElBody = make_function_call(
                               FunName,
-                              [erl_syntax:variable("__TopXMLNS"),
-			       erl_syntax:variable("__IgnoreEls"),
-			       _ElsVar|CDataVars ++ ElemVars] ++
+                              [?AST(__TopXMLNS),
+			       ?AST(__IgnoreEls),
+			       ?AST(_els)|CDataVars ++ ElemVars] ++
                                   [erl_syntax:list(
-                                     [erl_syntax:variable("_el")],
+                                     [?AST(_el)],
                                      label_to_var('$_xmls'))]),
                 [erl_syntax:clause(SubElPattern, none, [SubElBody])];
             {true, true} ->
                 SubElBody = erl_syntax:if_expr(
 			      [erl_syntax:clause(
 				 [],
-				 [erl_syntax:variable("__IgnoreEls")],
+				 [?AST(__IgnoreEls)],
 				 [make_function_call(
                                     FunName,
-                                    [erl_syntax:variable("__TopXMLNS"),
-				     erl_syntax:variable("__IgnoreEls"),
-				     _ElsVar|CDataVars ++ ElemVars] ++
+                                    [?AST(__TopXMLNS),
+				     ?AST(__IgnoreEls),
+				     ?AST(_els)|CDataVars ++ ElemVars] ++
                                         [label_to_var('$_els')] ++
                                         [erl_syntax:list(
-                                           [erl_syntax:variable("_el")],
+                                           [?AST(_el)],
                                            label_to_var('$_xmls'))])]),
 			       erl_syntax:clause(
 				 [], none,
 				 [erl_syntax:case_expr(
-				    make_function_call(
-				      is_known_tag,
-				      [erl_syntax:variable("_el")]),
+				    ?AST(is_known_tag(_el)),
 				    [erl_syntax:clause(
-				       [erl_syntax:atom("true")],
+				       [?AST(true)],
 				       none,
 				       [make_function_call(
 					  FunName,
-					  [erl_syntax:variable("__TopXMLNS"),
-					   erl_syntax:variable("__IgnoreEls"),
-					   _ElsVar|CDataVars ++ ElemVars] ++
+					  [?AST(__TopXMLNS),
+					   ?AST(__IgnoreEls),
+					   ?AST(_els)|CDataVars ++ ElemVars] ++
 					      [erl_syntax:list(
-						 [make_function_call(
-						    "decode",
-						    [erl_syntax:variable("_el")])],
+						 [?AST(decode(_el))],
 						 label_to_var('$_els'))]
 					  ++ [label_to_var('$_xmls')])]),
 				     erl_syntax:clause(
-				       [erl_syntax:atom("false")],
+				       [?AST(false)],
 				       none,
 				       [make_function_call(
 					  FunName,
-					  [erl_syntax:variable("__TopXMLNS"),
-					   erl_syntax:variable("__IgnoreEls"),
-					   _ElsVar|CDataVars ++ ElemVars] ++
+					  [?AST(__TopXMLNS),
+					   ?AST(__IgnoreEls),
+					   ?AST(_els)|CDataVars ++ ElemVars] ++
 					      [label_to_var('$_els')] ++
 					      [erl_syntax:list(
-						 [erl_syntax:variable("_el")],
+						 [?AST(_el)],
 						 label_to_var('$_xmls'))])])])])]),
                 [erl_syntax:clause(SubElPattern, none, [SubElBody])];
             {false, false} ->
@@ -1223,16 +1142,16 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
         end,
     PassClause = if SubElVars == []; CDataVars == [] ->
                          [erl_syntax:clause(
-                            [erl_syntax:variable("__TopXMLNS"),
-			     erl_syntax:variable("__IgnoreEls"),
+                            [?AST(__TopXMLNS),
+			     ?AST(__IgnoreEls),
 			     erl_syntax:list(
-                               [erl_syntax:underscore()],
-                               _ElsVar)|CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
+                               [?AST(_)],
+                               ?AST(_els))|CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
                             none,
                             [make_function_call(
                                FunName,
-                               [erl_syntax:variable("__TopXMLNS"),
-				erl_syntax:variable("__IgnoreEls"), _ElsVar
+                               [?AST(__TopXMLNS),
+				?AST(__IgnoreEls), ?AST(_els)
 				|CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars])])];
                     true ->
                          []
@@ -1250,12 +1169,12 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
         lists:map(
           fun(#attr{name = Name, label = Label}) ->
                   Var = label_to_var(prepare_label(Label, Name)),
-                  Pattern = [erl_syntax:variable("__TopXMLNS"),
+                  Pattern = [?AST(__TopXMLNS),
 			     erl_syntax:list(
                                [erl_syntax:tuple(
                                   [abstract(Name),
-                                   erl_syntax:variable("_val")])],
-                               erl_syntax:variable("_attrs")) |
+                                   ?AST(_val)])],
+                               ?AST(_attrs)) |
                              lists:map(
                                fun(V) when V == Var ->
                                        VName = erl_syntax:variable_literal(V),
@@ -1265,11 +1184,11 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
                                end, AttrVars)],
                   Body = [make_function_call(
                             FunName,
-                            [erl_syntax:variable("__TopXMLNS"),
-			     erl_syntax:variable("_attrs") |
+                            [?AST(__TopXMLNS),
+			     ?AST(_attrs) |
                              lists:map(
                                fun(V) when V == Var ->
-                                       erl_syntax:variable("_val");
+                                       ?AST(_val);
                                   (V) ->
                                        V
                                end, AttrVars)])],
@@ -1277,26 +1196,24 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
           end, Attrs),
     if Clauses /= [] ->
             PassClause = erl_syntax:clause(
-                           [erl_syntax:variable("__TopXMLNS"),
-			    erl_syntax:list(
-                              [erl_syntax:underscore()],
-                              erl_syntax:variable("_attrs"))
+                           [?AST(__TopXMLNS),
+			    ?AST([_|_attrs])
                             |AttrVars],
                            none,
                            [make_function_call(
                               FunName,
-                              [erl_syntax:variable("__TopXMLNS"),
-			       erl_syntax:variable("_attrs")|AttrVars])]),
+                              [?AST(__TopXMLNS),
+			       ?AST(_attrs)|AttrVars])]),
             Result = lists:map(
                        fun(#attr{name = Name, label = Label}) ->
                                Var = label_to_var(prepare_label(Label, Name)),
                                make_function_call(
                                  make_dec_fun_name([Name,attr,Tag]),
-				 [erl_syntax:variable("__TopXMLNS"), Var])
+				 [?AST(__TopXMLNS), Var])
                        end, Attrs),
             NilClause = erl_syntax:clause(
-                          [erl_syntax:variable("__TopXMLNS"),
-			   erl_syntax:list([])|AttrVars],
+                          [?AST(__TopXMLNS),
+			   ?AST([])|AttrVars],
                           none,
                           [tuple_or_single_var(Result)]),
             [erl_syntax:function(
@@ -1307,20 +1224,18 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
     end.
 
 make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
-    _AccVar = erl_syntax:variable("_acc"),
-    _ElsVar = erl_syntax:variable("_els"),
     lists:map(
       fun({L, [#ref{min = Min, max = Max, default = Default}|_] = Refs}) ->
               DefaultClause = if Min == 0, Max == 1 ->
                                       [erl_syntax:clause(
-                                         [abstract(Default), _AccVar],
-                                         none, [_AccVar])];
+                                         [abstract(Default), ?AST(_acc)],
+                                         none, [?AST(_acc)])];
                                  Min == 1, Max == 1 ->
                                       [];
                                  true ->
                                       [erl_syntax:clause(
-                                         [erl_syntax:list([]), _AccVar],
-                                         none, [_AccVar])]
+                                         [?AST([]), ?AST(_acc)],
+                                         none, [?AST(_acc)])]
                               end,
               Var = label_to_var(L),
               Clauses =
@@ -1330,11 +1245,11 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                             XMLNS = RefElem#elem.xmlns,
                             XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
 					     true ->
-                                                 erl_syntax:list([]);
+                                                 ?AST([]);
 					     {false, NS} ->
                                                  erl_syntax:list(
                                                    [erl_syntax:tuple(
-                                                      [abstract(<<"xmlns">>),
+                                                      [?AST(<<"xmlns">>),
                                                        abstract(NS)])])
                                          end,
                             Pattern =
@@ -1343,9 +1258,9 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                                                      labels_to_underscores(
                                                        RefElem#elem.result),
                                                      Var),
-                                        [MatchVar, _AccVar];
+                                        [MatchVar, ?AST(_acc)];
                                    true ->
-                                        [Var, _AccVar]
+                                        [Var, ?AST(_acc)]
                                 end,
                             erl_syntax:clause(
                               Pattern,
@@ -1354,17 +1269,17 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                                  [make_function_call(
                                     make_enc_fun_name([RefName]),
                                     [Var, XMLNSAttrs])],
-                                 _AccVar)]);
+                                 ?AST(_acc))]);
                        (#ref{name = RefName}) ->
                             RefElem = get_elem_by_ref(RefName, AllElems),
                             XMLNS = RefElem#elem.xmlns,
                             XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
 					     true ->
-                                                 erl_syntax:list([]);
+                                                 ?AST([]);
 					     {false, NS} ->
                                                  erl_syntax:list(
                                                    [erl_syntax:tuple(
-                                                      [abstract(<<"xmlns">>),
+                                                      [?AST(<<"xmlns">>),
                                                        abstract(NS)])])
                                          end,
                             Pattern =
@@ -1377,16 +1292,16 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                                         Var
                                 end,
                             erl_syntax:clause(
-                              [erl_syntax:list([Pattern], _ElsVar), _AccVar],
+                              [erl_syntax:list([Pattern], ?AST(_els)), ?AST(_acc)],
                               none,
                               [make_function_call(
                                  make_enc_fun_name([L,Tag]),
-                                 [_ElsVar,
+                                 [?AST(_els),
                                   erl_syntax:list(
                                     [make_function_call(
                                        make_enc_fun_name([RefName]),
                                        [Var, XMLNSAttrs])],
-                                    _AccVar)])])
+                                    ?AST(_acc))])])
                     end, Refs),
               erl_syntax:function(
                 erl_syntax:atom(make_enc_fun_name([L,Tag])),
@@ -1405,14 +1320,12 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
     SubElGenerator = case have_label(Result, '$_els') of
                          true ->
                              erl_syntax:list_comp(
-                               make_function_call(
-                                 "encode",
-                                 [erl_syntax:variable("_el")]),
+			       ?AST(encode(_el)),
                                [erl_syntax:generator(
-                                  erl_syntax:variable("_el"),
+                                  ?AST(_el),
                                   label_to_var('$_els'))]);
                          false ->
-                             erl_syntax:list([])
+                             ?AST([])
                      end,
     XmlElGenerator = case {have_label(Result, '$_xmls'),
                            have_label(Result, '$_els')} of
@@ -1426,7 +1339,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                          {false, true} ->
                              SubElGenerator;
                          {false, false} ->
-                             erl_syntax:list([])
+                             ?AST([])
                      end,
     RefsFun = lists:foldr(
 		fun({Label, _}, Acc) ->
@@ -1434,7 +1347,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 			make_function_call(
 			  make_enc_fun_name([Label,Tag]),
 			  [Var, Acc])
-		end, erl_syntax:list([]), group_refs(Refs)),
+		end, ?AST([]), group_refs(Refs)),
     CDataFun = if HaveRefs and HaveCData ->
 		       make_function_call(
 			 lists, reverse,
@@ -1446,9 +1359,9 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 		  HaveCData and not HaveRefs ->
 		       make_function_call(make_enc_fun_name([cdata,Tag]),
 					     [label_to_var(CDataLabel),
-					      erl_syntax:list([])]);
+					      ?AST([])]);
                   true ->
-		       erl_syntax:list([])
+		       ?AST([])
                end,
     ResFun = if (HaveCData or HaveRefs) and (HaveXMLs or HaveEls) ->
 		     erl_syntax:infix_expr(
@@ -1458,7 +1371,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 		HaveXMLs or HaveEls ->
 		     XmlElGenerator;
 		true ->
-		     erl_syntax:list([])
+		     ?AST([])
 	     end,
     AttrFun = lists:foldl(
                 fun(#attr{name = AttrName, label = AttrLabel}, Acc) ->
@@ -1466,19 +1379,19 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                         make_function_call(
                           make_enc_fun_name([AttrName,attr,Tag]),
                           [Var, Acc])
-                end, erl_syntax:variable("_xmlns_attrs"), Attrs),
+                end, ?AST(_xmlns_attrs), Attrs),
     [erl_syntax:function(
        erl_syntax:atom(make_enc_fun_name([Tag])),
        [erl_syntax:clause(
-          [subst_labels(Result), erl_syntax:variable("_xmlns_attrs")],
+          [subst_labels(Result), ?AST(_xmlns_attrs)],
           none,
-          [erl_syntax:match_expr(erl_syntax:variable("_els"), ResFun),
-           erl_syntax:match_expr(erl_syntax:variable("_attrs"),AttrFun),
+          [erl_syntax:match_expr(?AST(_els), ResFun),
+           erl_syntax:match_expr(?AST(_attrs),AttrFun),
            erl_syntax:tuple(
-             [erl_syntax:atom("xmlel"),
+             [?AST(xmlel),
               abstract(ElemName),
-              erl_syntax:variable("_attrs"),
-              erl_syntax:variable("_els")])
+              ?AST(_attrs),
+              ?AST(_els)])
           ])])] ++ make_ref_enc_funs(Elem, Tag, AllElems).
 
 make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
@@ -1489,9 +1402,9 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                _ -> "attr"
            end,
     Clause1 = erl_syntax:clause(
-                [erl_syntax:variable("__TopXMLNS"),
-		 if Type == "attr" -> erl_syntax:atom(undefined);
-                    true -> abstract(<<>>) end],
+                [?AST(__TopXMLNS),
+		 if Type == "attr" -> ?AST(undefined);
+                    true -> ?AST(<<>>) end],
                 none,
                 [if IsRequired ->
                          make_erlang_error(
@@ -1500,7 +1413,7 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                              [erl_syntax:atom("missing_" ++ Type),
                               abstract(AttrName),
                               abstract(TagName),
-                              erl_syntax:variable("__TopXMLNS")]));
+                              ?AST(__TopXMLNS)]));
                     true ->
                          abstract(Default)
                  end]),
@@ -1508,15 +1421,15 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                {M, F, Args} ->
                    make_function_call(
                      M, F,
-                     [erl_syntax:variable("_val")|
+                     [?AST(_val)|
                       [abstract(Arg) || Arg <- Args]]);
                {F, Args} ->
                    make_function_call(
                      F,
-                     [erl_syntax:variable("_val")|
+                     [?AST(_val)|
                       [abstract(Arg) || Arg <- Args]]);
                undefined ->
-                   erl_syntax:variable("_val")
+                   ?AST(_val)
            end,
     Catch = case DecMFA of
                 undefined ->
@@ -1525,8 +1438,7 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                     erl_syntax:case_expr(
                       erl_syntax:catch_expr(Body),
                       [erl_syntax:clause(
-                         [erl_syntax:tuple([erl_syntax:atom("EXIT"),
-                                            erl_syntax:underscore()])],
+                         [?AST({'EXIT', _})],
                          none,
                          [make_erlang_error(
                             ModName,
@@ -1534,15 +1446,15 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                               [erl_syntax:atom("bad_" ++ Type ++ "_value"),
                                abstract(AttrName),
                                abstract(TagName),
-                               erl_syntax:variable("__TopXMLNS")]))]),
+                               ?AST(__TopXMLNS)]))]),
                        erl_syntax:clause(
-                         [erl_syntax:variable("_res")],
+                         [?AST(_res)],
                          none,
-                         [erl_syntax:variable("_res")])])
+                         [?AST(_res)])])
             end,
     Clause2 = erl_syntax:clause(
-		[erl_syntax:variable("__TopXMLNS"),
-		 erl_syntax:variable("_val")], none, [Catch]),
+		[?AST(__TopXMLNS),
+		 ?AST(_val)], none, [Catch]),
     [erl_syntax:function(erl_syntax:atom(FunName), [Clause1, Clause2])].
 
 make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
@@ -1551,34 +1463,34 @@ make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
                  true ->
                       [erl_syntax:clause(
                          [abstract(AttrDefault),
-                          erl_syntax:variable("_acc")],
+                          ?AST(_acc)],
                          none,
-                         [erl_syntax:variable("_acc")])]
+                         [?AST(_acc)])]
               end,
     Body = case EncMFA of
                {M, F, Args} ->
                    make_function_call(
                      M, F,
-                     [erl_syntax:variable("_val")|
+                     [?AST(_val)|
                       [abstract(Arg) || Arg <- Args]]);
                {F, Args} ->
                    make_function_call(
                      F,
-                     [erl_syntax:variable("_val")|
+                     [?AST(_val)|
                       [abstract(Arg) || Arg <- Args]]);
                undefined ->
-                   erl_syntax:variable("_val")
+                   ?AST(_val)
            end,
     Clause2 = [erl_syntax:clause(
-                 [erl_syntax:variable("_val"),
-                  erl_syntax:variable("_acc")],
+                 [?AST(_val),
+                  ?AST(_acc)],
                  none,
                  [erl_syntax:list(
                     [erl_syntax:tuple(
                        [if AttrName /= <<>> -> abstract(AttrName);
-                           true -> erl_syntax:atom("xmlcdata")
+                           true -> ?AST(xmlcdata)
                         end, Body])],
-                    erl_syntax:variable("_acc"))])],
+                    ?AST(_acc))])],
     [erl_syntax:function(
        erl_syntax:atom(make_enc_fun_name(Parents)),
        Clause1 ++ Clause2)].
@@ -1720,7 +1632,7 @@ labels_to_underscores(Term, Except) ->
 		      true ->
 			  label_to_var(Label);
 		      false ->
-			  erl_syntax:underscore()
+			  ?AST(_)
 		  end
               catch _:_ ->
                       T

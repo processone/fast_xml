@@ -21,6 +21,9 @@
 %%%
 %%%----------------------------------------------------------------------
 
+-define(AST_MARK, ast__mark_).
+-define(AST(Code), ?AST_MARK(Code)).
+
 -record(attr, {name,
 	       label,
 	       required = false,
