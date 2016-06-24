@@ -1,3 +1,7 @@
+Version 1.1.12
+
+* Generator improvements (Evgeny Khramtsov)
+
 Version 1.1.11
 
 * Now properly includes Elixir lib/ directory in hex.pm package (Mickaël Rémond)
