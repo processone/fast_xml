@@ -1,3 +1,7 @@
+Version 1.1.13
+
+* Use p1_utils 1.0.4 (Mickaël Rémond)
+
 Version 1.1.12
 
 * Generator improvements (Evgeny Khramtsov)
