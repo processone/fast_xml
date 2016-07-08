@@ -1,12 +1,17 @@
-Version 1.1.13
+# Version 1.1.14
+
+* Erlang OTP R19 compliance (Paweł Chmielowski)
+* Fix compilation on rebar3 (Paweł Chmielowski)
+
+# Version 1.1.13
 
 * Use p1_utils 1.0.4 (Mickaël Rémond)
 
-Version 1.1.12
+# Version 1.1.12
 
 * Generator improvements (Evgeny Khramtsov)
 
-Version 1.1.11
+# Version 1.1.11
 
 * Now properly includes Elixir lib/ directory in hex.pm package (Mickaël Rémond)
 
