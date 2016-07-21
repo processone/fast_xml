@@ -469,13 +469,11 @@ make_top_encoders(TaggedSpecs, Opts) ->
 			  {RecAcc, ResAcc}
 		  end
 	  end, {dict:new(), dict:new()}, TaggedSpecs),
-    NilNSClause = erl_syntax:clause(
-		    [?AST(_)], none, [?AST(<<"">>)]),
-    {EncClauses, NSClauses, _} =
+    {EncClauses, NSClauses, TagClauses, _} =
         lists:foldl(
           fun({Tag, #elem{name = Name, xmlns = XMLNS,
 			  result = Result, attrs = Attrs}},
-	      {EncAcc, NSAcc, Seen}) ->
+	      {EncAcc, NSAcc, TagAcc, Seen}) ->
 		  XMLNSLabel = case lists:keyfind(<<"xmlns">>, #attr.name, Attrs) of
 				   #attr{label = L, name = N} ->
 				       prepare_label(L, N);
@@ -484,6 +482,7 @@ make_top_encoders(TaggedSpecs, Opts) ->
 			       end,
                   EncodeResult = labels_to_underscores(Result),
 		  NSResult = labels_to_underscores(Result, [XMLNSLabel]),
+		  TagResult = labels_to_underscores(Result),
                   Var = label_to_var(prepare_label(undefined, Name)),
 		  HasXMLNSAttr = XMLNSLabel /= undefined,
                   try
@@ -524,16 +523,24 @@ make_top_encoders(TaggedSpecs, Opts) ->
 				  [NSResult], none,
 				  [abstract(XMLNS)])|NSAcc]
 		       end,
+		       if AlreadySeen ->
+			       TagAcc;
+			  true ->
+			       [erl_syntax:clause(
+				  [TagResult], none,
+				  [abstract(Name)])|TagAcc]
+		       end,
 		       [Result|Seen]}
                   catch _:_ ->
-                          {EncAcc, NSAcc, Seen}
+                          {EncAcc, NSAcc, TagAcc, Seen}
                   end
-          end, {[], [NilNSClause], []}, TaggedSpecs),
+          end, {[], [], [], []}, TaggedSpecs),
     XmlElClause = erl_syntax:clause(
 		    [?AST({xmlel, _, _, _} = El)],
 		    none,
 		    [?AST(El)]),
     [erl_syntax:function(?AST(encode), [XmlElClause|EncClauses]),
+     erl_syntax:function(?AST(get_name), TagClauses),
      erl_syntax:function(?AST(get_ns), NSClauses)].
 
 make_printer(TaggedSpecs, PredefRecords) ->
