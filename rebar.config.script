@@ -4,7 +4,7 @@
 %%% Purpose : Rebar build script. Compliant with rebar and rebar3.
 %%% Created : 8 May 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
 %%%
-%%% Copyright (C) 2002-2015 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2016 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
@@ -81,7 +81,13 @@ Cfg2 = case IsRebar3 of
                                                     end, DepsList)
                          end,
                RB1 = ModCfg(Cfg1, [deps], DepsFun, []),
-               ModCfg(RB1, [plugins], fun(V) -> V ++ [rebar3_hex] end, []);
+               RB2 = ModCfg(RB1, [plugins], fun(V) -> V ++ [rebar3_hex, pc] end, []),
+               ModCfg(RB2, [provider_hooks], fun(V) -> V ++ [{pre,
+							      [
+							       {compile, {pc, compile}},
+							       {clean, {pc, clean}}
+							      ]
+							     }] end, []);
            false ->
                Cfg1
        end,
