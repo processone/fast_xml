@@ -176,17 +176,6 @@ compile(TaggedElems, Forms, Path, Opts) ->
     ErlDirName = proplists:get_value(erl_dir, Opts, DirName),
     HrlDirName = proplists:get_value(hrl_dir, Opts, DirName),
     Types = get_types(TaggedElems),
-    AST = lists:flatmap(
-            fun({Tag, Elem}) ->
-                    Elem1 = prepare_elem(Elem, KnownFuns, TaggedElems, Opts),
-                    elem_to_AST(Elem1, Tag, TaggedElems, Types, ModName, Opts)
-            end, TaggedElems),
-    Module = erl_syntax:attribute(
-               ?AST(module),
-               [erl_syntax:atom(ModName)]),
-    Decoders = make_top_decoders(TaggedElems, ModName, Opts),
-    Encoders = make_top_encoders(TaggedElems, Opts),
-    AuxFuns = make_aux_funs(),
     {AttrForms, FunForms} = lists:partition(
 			      fun(Form) ->
 				      erl_syntax:type(Form) == attribute
@@ -196,6 +185,18 @@ compile(TaggedElems, Forms, Path, Opts) ->
 			      erl_syntax:get_ann(Form)
 		      end, lists:reverse(AttrForms)),
     PredefRecords = get_predefined_records(AttrForms),
+    AST = lists:flatmap(
+            fun({Tag, Elem}) ->
+                    Elem1 = prepare_elem(Elem, KnownFuns, TaggedElems, Opts),
+                    elem_to_AST(Elem1, Tag, TaggedElems, Types,
+				ModName, PredefRecords, Opts)
+            end, TaggedElems),
+    Module = erl_syntax:attribute(
+               ?AST(module),
+               [erl_syntax:atom(ModName)]),
+    Decoders = make_top_decoders(TaggedElems, ModName, Opts),
+    Encoders = make_top_encoders(TaggedElems, Opts),
+    AuxFuns = make_aux_funs(),
     Printer = make_printer(TaggedElems, PredefRecords),
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
         Printer ++ FunForms ++ AST,
@@ -251,8 +252,7 @@ get_predefined_records(AttrForms) ->
       fun(F, Acc) ->
 	      case erl_syntax_lib:analyze_attribute(F) of
 		  {record, {RecName, RecAttrs}} ->
-		      Fields = [Field || {Field, _} <- RecAttrs],
-		      dict:store(RecName, Fields, Acc);
+		      dict:store(RecName, RecAttrs, Acc);
 		  _ ->
 		      Acc
 	      end
@@ -592,7 +592,7 @@ make_printer(TaggedSpecs, PredefRecords) ->
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem,
-            Tag, AllElems, Types, ModName, Opts) ->
+            Tag, AllElems, Types, ModName, PredefRecords, Opts) ->
     AttrAST = lists:flatmap(
                 fun(#attr{name = AttrName,
                           required = Required,
@@ -624,23 +624,60 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
             false ->
                 []
         end,
-    DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types, ModName, Opts),
+    DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types,
+			       ModName, PredefRecords, Opts),
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems),
     DecAST ++ EncAST ++ AttrAST ++ CDataAST.
 
 %% Replace in `Term' every label found in `Labels'
 %% with the corresponding value.
 subst_labels(Term) ->
-    erl_syntax_lib:map(
-      fun(T) ->
-              try
-                  Label = erl_syntax:atom_value(T),
-                  true = is_label(Label),
-                  label_to_var(Label)
-              catch _:_ ->
-                      T
-              end
-      end, abstract(Term)).
+    subst_labels(Term, undefined).
+
+subst_labels(Term, PredefRecords) ->
+    case have_label(Term, '$_') of
+	true when PredefRecords /= undefined ->
+	    try
+		true = term_is_record(Term),
+		[H|Elems] = erl_syntax:tuple_elements(abstract(Term)),
+		RecName = erl_syntax:atom_value(H),
+		RecFields = dict:fetch(RecName, PredefRecords),
+		Vars = lists:map(
+			 fun({T, {_, Default}}) ->
+				 AbsDefault = if Default == none ->
+						      ?AST(undefined);
+						 true ->
+						      Default
+					      end,
+				 try
+				     Label = erl_syntax:atom_value(T),
+				     true = is_label(Label),
+				     case Label of
+					 '$_' -> AbsDefault;
+					 _ -> label_to_var(Label)
+				     end
+				 catch _:_ ->
+					 T
+				 end
+			 end, lists:zip(Elems, RecFields)),
+		erl_syntax:tuple([H|Vars])
+	    catch error:{badmatch, false} ->
+		    bad_spec({underscore_label_outside_record_tuple, Term});
+		  _:_ ->
+		    bad_spec({no_predefined_record_found, Term})
+	    end;
+	_ ->
+	    erl_syntax_lib:map(
+	      fun(T) ->
+		      try
+			  Label = erl_syntax:atom_value(T),
+			  true = is_label(Label),
+			  label_to_var(Label)
+		      catch _:_ ->
+			      T
+		      end
+	      end, abstract(Term))
+    end.
 
 get_elem_by_ref(RefName, TaggedElems) ->
     {_, Elem} = lists:keyfind(RefName, 1, TaggedElems),
@@ -650,6 +687,8 @@ get_spec_by_label('$_els', _Elem) ->
     sub_els;
 get_spec_by_label('$_xmls', _Elem) ->
     xml_els;
+get_spec_by_label('$_', _Elem) ->
+    '_';
 get_spec_by_label(Label, Elem) ->
     [Spec|T] = lists:flatmap(
                  fun(#cdata{label = L} = CData) when Label == L ->
@@ -687,9 +726,9 @@ group_refs(Refs) ->
 
 make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs,
                         cdata = CData, attrs = Attrs, xmlns = XMLNS},
-                  Tag, AllElems, Types, ModName, Opts) ->
+                  Tag, AllElems, Types, ModName, PredefRecords, Opts) ->
     FunName = make_dec_fun_name([Tag]),
-    ResultWithVars = subst_labels(Result),
+    ResultWithVars = subst_labels(Result, PredefRecords),
     AttrVars = lists:map(
                  fun(#attr{name = AttrName, label = AttrLabel}) ->
                          label_to_var(prepare_label(AttrLabel, AttrName))
@@ -1710,6 +1749,8 @@ get_label_type(Label, Elem, Dict) ->
             {erl_types:t_list(), [], false};
         xml_els ->
             {erl_types:t_list(), [], false};
+	'_' ->
+	    {erl_types:t_from_term(undefined), [], false};
         #attr{dec = DecFun, default = Default, required = IsRequired} ->
             {get_fun_return_type(DecFun), Default, IsRequired};
         #cdata{dec = DecFun, default = Default, required = IsRequired} ->
@@ -1935,7 +1976,7 @@ check_labels(#elem{result = Result, attrs = Attrs,
     ResultSet = sets:from_list(ResultLabels),
     AllSet = sets:from_list(AllLabels),
     UnresolvedLabels = sets:to_list(
-                         sets:subtract(ResultSet, AllSet)) -- ['$_els', '$_xmls'],
+                         sets:subtract(ResultSet, AllSet)) -- ['$_els', '$_xmls', '$_'],
     UnusedLabels = sets:to_list(sets:subtract(AllSet, ResultSet)) -- ['$cdata'],
     if UnresolvedLabels /= [] ->
             bad_spec({unresolved_labels, UnresolvedLabels});
@@ -2031,6 +2072,8 @@ is_label(Label) ->
             true;
         "$_xmls" ->
             true;
+	"$_" ->
+	    true;
         [$$,$_|_] ->
             false;
         [$$,$-|_] ->
