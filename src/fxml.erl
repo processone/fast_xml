@@ -37,6 +37,7 @@
 -export([load_nif/0]).
 
 -include("fxml.hrl").
+-export_type([xmlel/0]).
 
 %% Replace element_to_binary/1 with NIF
 load_nif() ->
