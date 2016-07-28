@@ -175,7 +175,7 @@ compile(TaggedElems, Forms, Path, Opts) ->
     DirName = filename:dirname(Path),
     ErlDirName = proplists:get_value(erl_dir, Opts, DirName),
     HrlDirName = proplists:get_value(hrl_dir, Opts, DirName),
-    Types = get_types(TaggedElems),
+    Types = get_types(TaggedElems, Opts),
     {AttrForms, FunForms} = lists:partition(
 			      fun(Form) ->
 				      erl_syntax:type(Form) == attribute
@@ -334,7 +334,7 @@ record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, Opts) ->
     Fs = lists:map(
            fun(Label) ->
                    FName = label_to_record_field(Label),
-                   case get_label_type(Label, Elem, RecTypes) of
+                   case get_label_type(Label, Elem, RecTypes, Opts) of
                        {FType, undefined, _} ->
                            FType1 = erl_types:t_subtract(
                                       FType, erl_types:t_atom(undefined)),
@@ -1657,6 +1657,11 @@ term_is_record(Term) ->
             false
     end.
 
+%% This is a copy-paste from erl_types.erl and probably will
+%% be broken from time to time in new OTP releases.
+t_identifier(Elem) ->
+    {c, identifier, ordsets:from_list([Elem]), unknown}.
+
 term_to_t([H|T], LabelTypes) ->
     erl_types:t_cons(term_to_t(H, LabelTypes), term_to_t(T, LabelTypes));
 term_to_t([], _LabelTypes) ->
@@ -1701,7 +1706,7 @@ term_to_t(T, LabelTypes) when is_tuple(T) ->
 is_subtype(Term, Type) ->
     erl_types:t_is_subtype(erl_types:t_from_term(Term), Type).
 
-get_types(TaggedElems) ->
+get_types(TaggedElems, Opts) ->
     G = build_ref_deps(TaggedElems),
     SortedTags = digraph_utils:topsort(G),
     TypesDict = lists:foldl(
@@ -1712,7 +1717,7 @@ get_types(TaggedElems) ->
                           LabelTypes =
                               lists:map(
                                 fun(Label) ->
-                                        {Label, get_label_type(Label, RefElem, Dict)}
+                                        {Label, get_label_type(Label, RefElem, Dict, Opts)}
                                 end, Labels),
                           Type = term_to_t(Result, LabelTypes),
                           dict:store(RefName, Type, Dict)
@@ -1743,12 +1748,19 @@ extract_labels_from_term(Term) ->
               end
       end, [], abstract(Term)).
 
-get_label_type(Label, Elem, Dict) ->
+get_label_type(Label, Elem, Dict, Opts) ->
+    XMLType = erl_types:t_remote(fxml, xmlel, []),
     case get_spec_by_label(Label, Elem) of
         sub_els ->
-            {erl_types:t_list(), [], false};
+	    T = case proplists:get_value(add_type_specs, Opts) of
+		    SpecName when is_atom(SpecName), SpecName /= undefined ->
+			erl_types:t_sup([XMLType, t_identifier(SpecName)]);
+		    _ ->
+			erl_types:t_any()
+		end,
+            {erl_types:t_list(T), [], false};
         xml_els ->
-            {erl_types:t_list(), [], false};
+            {erl_types:t_list(XMLType), [], false};
 	'_' ->
 	    {erl_types:t_from_term(undefined), [], false};
         #attr{dec = DecFun, default = Default, required = IsRequired} ->
