@@ -145,7 +145,7 @@ get_attr(Attr, Attrs) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-compile(TaggedElems, Forms, Path, Opts) ->
+compile(TaggedElems0, Forms, Path, Opts) ->
     KnownFuns = lists:flatmap(
                   fun(F) ->
                           case erl_syntax:type(F) of
@@ -155,6 +155,11 @@ compile(TaggedElems, Forms, Path, Opts) ->
                                   []
                           end
                   end, Forms),
+    TaggedElems = lists:map(
+		    fun({Tag, Elem}) ->
+			    {Tag, prepare_elem(Elem, KnownFuns,
+					       TaggedElems0, Opts)}
+		    end, TaggedElems0),
     Dups = get_dups([Tag || {Tag, _} <- TaggedElems]),
     if Dups /= [] ->
             bad_spec({duplicated_elem_specs, Dups});
@@ -187,8 +192,7 @@ compile(TaggedElems, Forms, Path, Opts) ->
     PredefRecords = get_predefined_records(AttrForms),
     AST = lists:flatmap(
             fun({Tag, Elem}) ->
-                    Elem1 = prepare_elem(Elem, KnownFuns, TaggedElems, Opts),
-                    elem_to_AST(Elem1, Tag, TaggedElems, Types,
+                    elem_to_AST(Elem, Tag, TaggedElems, Types,
 				ModName, PredefRecords, Opts)
             end, TaggedElems),
     Module = erl_syntax:attribute(
@@ -1763,10 +1767,14 @@ get_label_type(Label, Elem, Dict, Opts) ->
             {erl_types:t_list(XMLType), [], false};
 	'_' ->
 	    {erl_types:t_from_term(undefined), [], false};
+	#attr{dec = undefined, default = Default, required = IsRequired} ->
+	    {erl_types:t_binary(), Default, IsRequired};
         #attr{dec = DecFun, default = Default, required = IsRequired} ->
-            {get_fun_return_type(DecFun), Default, IsRequired};
+	    {get_fun_return_type(DecFun), Default, IsRequired};
+	#cdata{dec = undefined, default = Default, required = IsRequired} ->
+	    {erl_types:t_binary(), Default, IsRequired};
         #cdata{dec = DecFun, default = Default, required = IsRequired} ->
-            {get_fun_return_type(DecFun), Default, IsRequired};
+	    {get_fun_return_type(DecFun), Default, IsRequired};
         [#ref{min = Min, max = Max, default = Default}|_] = Refs ->
             Types = lists:flatmap(
                       fun(#ref{name = RefTag}) ->
@@ -1896,6 +1904,12 @@ prepare_ref(Name, #ref{name = RefName, label = Label} = Ref, AllElems) ->
 prepare_ref(Name, Junk, _) ->
     bad_spec({not_ref_spec, Junk, Name}).
 
+prepare_default('$unset', undefined, false) -> <<"">>;
+prepare_default('$unset', _DecFun, _IsRequired) -> undefined;
+prepare_default(Default, _DecFun, false) -> Default;
+prepare_default(Default, _DecFun, true) ->
+    bad_spec({default_must_be_unset, Default}).
+
 prepare_attr(Name, #attr{name = AName}, _)
   when not is_binary(AName) ->
     bad_spec({wrong_attr_name, AName, Name});
@@ -1906,14 +1920,16 @@ prepare_attr(Name, #attr{name = AName, required = Req}, _)
   when not (Req == false orelse Req == true) ->
     bad_spec({wrong_attr_required, Req, AName, Name});
 prepare_attr(Name, #attr{name = AName, label = Label,
+			 default = Default, required = IsRequired,
                          dec = DecF, enc = EncF} = Attr, KnownFunctions) ->
+    NewDefault = prepare_default(Default, DecF, IsRequired),
     NewDecFun = prep_dec_fun(DecF, KnownFunctions),
     NewEncFun = prep_enc_fun(EncF, KnownFunctions),
     case (is_label(Label) or (Label == undefined)) of
         false ->
             bad_spec({wrong_attr_label_format, Label, AName, Name});
         true ->
-            Attr#attr{dec = NewDecFun, enc = NewEncFun}
+            Attr#attr{dec = NewDecFun, enc = NewEncFun, default = NewDefault}
     end;
 prepare_attr(Name, Junk, _) ->
     bad_spec({not_attr_spec, Junk, Name}).
@@ -1924,15 +1940,17 @@ prepare_cdata(Name, #cdata{label = Label}, _)
 prepare_cdata(Name, #cdata{required = Req}, _)
   when not (Req == false orelse Req == true) ->
     bad_spec({wrong_cdata_required, Req, Name});
-prepare_cdata(Name, #cdata{label = Label, dec = DecF, enc = EncF} = CData,
+prepare_cdata(Name, #cdata{label = Label, dec = DecF, enc = EncF,
+			   default = Default, required = IsRequired} = CData,
                  KnownFunctions) ->
+    NewDefault = prepare_default(Default, DecF, IsRequired),
     NewDecFun = prep_dec_fun(DecF, KnownFunctions),
     NewEncFun = prep_enc_fun(EncF, KnownFunctions),
     case (is_label(Label) or (Label == undefined)) of
         false ->
             bad_spec({wrong_cdata_label_format, Label, Name});
         true ->
-            CData#cdata{enc = NewEncFun, dec = NewDecFun}
+            CData#cdata{enc = NewEncFun, dec = NewDecFun, default = NewDefault}
     end;
 prepare_cdata(Name, Junk, _) ->
     bad_spec({not_cdata_spec, Junk, Name}).

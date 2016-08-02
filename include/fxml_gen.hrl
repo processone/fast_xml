@@ -27,13 +27,13 @@
 -record(attr, {name,
 	       label,
 	       required = false,
-	       default,
+	       default = '$unset',
 	       dec,
 	       enc}).
 
 -record(cdata, {required = false,
 		label = '$cdata',
-		default,
+		default = '$unset',
 		dec,
 		enc}).
 
