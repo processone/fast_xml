@@ -155,9 +155,27 @@ compile(TaggedElems0, Forms, Path, Opts) ->
                                   []
                           end
                   end, Forms),
+    {AttrForms, FunForms} = lists:partition(
+			      fun(Form) ->
+				      erl_syntax:type(Form) == attribute
+			      end, Forms),
+    FunSpecs = lists:foldl(
+		 fun(Form, D) ->
+			 case erl_syntax_lib:analyze_attribute(Form) of
+			     {spec, _} ->
+				 case get_fun_spec(erl_syntax:revert(Form)) of
+				     {Key, Value} ->
+					 dict:store(Key, Value, D);
+				     _ ->
+					 D
+				 end;
+			     _ ->
+				 D
+			 end
+		 end, dict:new(), AttrForms),
     TaggedElems = lists:map(
 		    fun({Tag, Elem}) ->
-			    {Tag, prepare_elem(Elem, KnownFuns,
+			    {Tag, prepare_elem(Elem, KnownFuns, FunSpecs,
 					       TaggedElems0, Opts)}
 		    end, TaggedElems0),
     Dups = get_dups([Tag || {Tag, _} <- TaggedElems]),
@@ -180,14 +198,15 @@ compile(TaggedElems0, Forms, Path, Opts) ->
     DirName = filename:dirname(Path),
     ErlDirName = proplists:get_value(erl_dir, Opts, DirName),
     HrlDirName = proplists:get_value(hrl_dir, Opts, DirName),
-    Types = get_types(TaggedElems, Opts),
-    {AttrForms, FunForms} = lists:partition(
-			      fun(Form) ->
-				      erl_syntax:type(Form) == attribute
-			      end, Forms),
+    Types = get_types(TaggedElems, FunSpecs, Opts),
     RawAttributes = lists:flatmap(
 		      fun(Form) ->
-			      erl_syntax:get_ann(Form)
+			      case erl_syntax_lib:analyze_attribute(Form) of
+				  {spec, _} ->
+				      [];
+				  _ ->
+				      erl_syntax:get_ann(Form)
+			      end
 		      end, lists:reverse(AttrForms)),
     PredefRecords = get_predefined_records(AttrForms),
     AST = lists:flatmap(
@@ -204,7 +223,7 @@ compile(TaggedElems0, Forms, Path, Opts) ->
     Printer = make_printer(TaggedElems, PredefRecords),
     NewAST = Decoders ++ Encoders ++ AuxFuns ++
         Printer ++ FunForms ++ AST,
-    Records = make_records(Types, TaggedElems, PredefRecords, Opts),
+    Records = make_records(Types, TaggedElems, PredefRecords, FunSpecs, Opts),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Exports = erl_syntax:attribute(
                 ?AST(export),
@@ -251,6 +270,14 @@ compile(TaggedElems0, Forms, Path, Opts) ->
             Err
     end.
 
+get_fun_spec({attribute, _, spec, {MFA, Args}}) ->
+    Spec = case [Range || {type, _, 'fun', [_, Range]} <- Args] of
+	       [] -> {type, 0, any, []};
+	       [T] -> T;
+	       Ts -> {type, 0, union, Ts}
+	   end,
+    {MFA, Spec}.
+
 get_predefined_records(AttrForms) ->
     lists:foldl(
       fun(F, Acc) ->
@@ -282,7 +309,7 @@ make_aux_funs() ->
             erlang:error({no_abstract_code_found, ?MODULE})
     end.
 
-make_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, Opts) ->
+make_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict, Opts) ->
     {Strings, _} =
         lists:foldl(
           fun(Tag, {Res, Seen}) ->
@@ -299,7 +326,7 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, Opts) ->
 				      false ->
 					  {[record_to_string(
 					      RefElem, RecDict,
-					      TypesDict, Opts)|Res],
+					      TypesDict, FunDict, Opts)|Res],
 					   [RecName|Seen]};
 				      true ->
 					  {Res, Seen}
@@ -331,14 +358,25 @@ make_typespecs(_ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
 atom_to_string(Atom) ->
     erl_syntax:atom_literal(abstract(Atom)).
 
-record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, Opts) ->
+-define(is_raw_type(T),
+	element(1, T) == type orelse
+	element(1, T) == remote_type).
+
+record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, FunTypes, Opts) ->
     [RecName|RecLabels] = tuple_to_list(Result),
     Prefix = "-record(" ++ atom_to_string(RecName) ++ ", {",
     Sep = "," ++ io_lib:nl() ++ lists:duplicate(length(Prefix), $ ),
     Fs = lists:map(
            fun(Label) ->
                    FName = label_to_record_field(Label),
-                   case get_label_type(Label, Elem, RecTypes, Opts) of
+                   case get_label_type(Label, Elem, RecTypes, FunTypes, Opts) of
+		       {FType, undefined, _} when ?is_raw_type(FType) ->
+			   [atom_to_string(FName), " :: ",
+			    erl_types:t_form_to_string(FType)];
+		       {FType, Default, _} when ?is_raw_type(FType) ->
+			   [atom_to_string(FName), " = ",
+                            io_lib:fwrite("~w", [Default]),
+                            " :: ", erl_types:t_form_to_string(FType)];
                        {FType, undefined, _} ->
                            FType1 = erl_types:t_subtract(
                                       FType, erl_types:t_atom(undefined)),
@@ -1635,9 +1673,12 @@ have_label(Term, Label) ->
               end
       end, false, abstract(Term)).
 
-get_fun_return_type({dec_enum, [Atoms]}) ->
+get_fun_return_type(Fun, FunSpecs) ->
+    get_fun_return_type(Fun, FunSpecs, dict:new()).
+
+get_fun_return_type({dec_enum, [Atoms]}, _, _) ->
     erl_types:t_atoms(Atoms);
-get_fun_return_type({dec_int, [Min, _]}) ->
+get_fun_return_type({dec_int, [Min, _]}, _, _) ->
     if Min > 0 ->
             erl_types:t_pos_integer();
        Min == 0 ->
@@ -1645,12 +1686,32 @@ get_fun_return_type({dec_int, [Min, _]}) ->
        Min < 0 ->
             erl_types:t_integer()
     end;
-get_fun_return_type({dec_int, []}) ->
+get_fun_return_type({dec_int, []}, _, _) ->
     erl_types:t_integer();
-get_fun_return_type(undefined) ->
-    erl_types:t_binary();
-get_fun_return_type(_) ->
-    erl_types:t_var('any()').
+get_fun_return_type({F, Args}, FunSpecs, _) ->
+    case dict:find({F, length(Args) + 1}, FunSpecs) of
+	{ok, Spec} ->
+	    Type = erl_types:t_from_form(Spec, sets:new(), mod, dict:new()),
+	    case erl_types:t_is_any(Type) of
+		true -> Spec;
+		false -> Type
+	    end;
+	_ ->
+	    erl_types:t_any()
+    end;
+get_fun_return_type({M, F, Args}, FunSpecs, _) ->
+    case dict:find({M, F, length(Args) + 1}, FunSpecs) of
+	{ok, Spec} ->
+	    Type = erl_types:t_from_form(Spec, sets:new(), mod, dict:new()),
+	    case erl_types:t_is_any(Type) of
+		true -> Spec;
+		false -> Type
+	    end;
+	_ ->
+	    erl_types:t_any()
+    end;
+get_fun_return_type(undefined, _, _) ->
+    erl_types:t_binary().
 
 term_is_record(Term) ->
     try
@@ -1676,6 +1737,8 @@ term_to_t(T, LabelTypes) when is_atom(T) ->
             {_, {Type, Default, IsRequired}} = lists:keyfind(T, 1, LabelTypes),
             if IsRequired ->
                     Type;
+	       ?is_raw_type(Type) ->
+		    Type;
                true ->
                     erl_types:t_sup(Type, erl_types:t_from_term(Default))
             end;
@@ -1707,10 +1770,12 @@ term_to_t(T, LabelTypes) when is_tuple(T) ->
               [term_to_t(E, LabelTypes) || E <- tuple_to_list(T)])
     end.
 
+is_subtype(_Term, Type) when ?is_raw_type(Type) ->
+    false;
 is_subtype(Term, Type) ->
     erl_types:t_is_subtype(erl_types:t_from_term(Term), Type).
 
-get_types(TaggedElems, Opts) ->
+get_types(TaggedElems, FunSpecs, Opts) ->
     G = build_ref_deps(TaggedElems),
     SortedTags = digraph_utils:topsort(G),
     TypesDict = lists:foldl(
@@ -1721,7 +1786,7 @@ get_types(TaggedElems, Opts) ->
                           LabelTypes =
                               lists:map(
                                 fun(Label) ->
-                                        {Label, get_label_type(Label, RefElem, Dict, Opts)}
+                                        {Label, get_label_type(Label, RefElem, Dict, FunSpecs, Opts)}
                                 end, Labels),
                           Type = term_to_t(Result, LabelTypes),
                           dict:store(RefName, Type, Dict)
@@ -1752,7 +1817,7 @@ extract_labels_from_term(Term) ->
               end
       end, [], abstract(Term)).
 
-get_label_type(Label, Elem, Dict, Opts) ->
+get_label_type(Label, Elem, Dict, FunSpecs, Opts) ->
     XMLType = erl_types:t_remote(fxml, xmlel, []),
     case get_spec_by_label(Label, Elem) of
         sub_els ->
@@ -1770,11 +1835,11 @@ get_label_type(Label, Elem, Dict, Opts) ->
 	#attr{dec = undefined, default = Default, required = IsRequired} ->
 	    {erl_types:t_binary(), Default, IsRequired};
         #attr{dec = DecFun, default = Default, required = IsRequired} ->
-	    {get_fun_return_type(DecFun), Default, IsRequired};
+	    {get_fun_return_type(DecFun, FunSpecs), Default, IsRequired};
 	#cdata{dec = undefined, default = Default, required = IsRequired} ->
 	    {erl_types:t_binary(), Default, IsRequired};
         #cdata{dec = DecFun, default = Default, required = IsRequired} ->
-	    {get_fun_return_type(DecFun), Default, IsRequired};
+	    {get_fun_return_type(DecFun, FunSpecs), Default, IsRequired};
         [#ref{min = Min, max = Max, default = Default}|_] = Refs ->
             Types = lists:flatmap(
                       fun(#ref{name = RefTag}) ->
@@ -1787,6 +1852,8 @@ get_label_type(Label, Elem, Dict, Opts) ->
             IsRequired = (Min == 1) and (Max == 1),
             if Max == 1 ->
                     {Type, Default, IsRequired};
+	       ?is_raw_type(Type) ->
+		    {Type, [], false};
                true ->
                     {erl_types:t_list(
                        erl_types:t_subtract(
@@ -1848,19 +1915,19 @@ get_abstract_code_from_myself() ->
 %% Auxiliary functions
 %%====================================================================
 %% Checks
-prepare_elem(#elem{name = Name}, _, _, _)
+prepare_elem(#elem{name = Name}, _, _, _, _)
   when not is_binary(Name) ->
     bad_spec({wrong_name, Name});
-prepare_elem(#elem{name = Name, xmlns = XMLNS}, _, _, _)
+prepare_elem(#elem{name = Name, xmlns = XMLNS}, _, _, _, _)
   when not is_binary(XMLNS), not is_list(XMLNS) ->
     bad_spec({wrong_xmlns, XMLNS, Name});
-prepare_elem(#elem{name = Name, refs = Refs}, _, _, _) when not is_list(Refs) ->
+prepare_elem(#elem{name = Name, refs = Refs}, _, _, _, _) when not is_list(Refs) ->
     bad_spec({wrong_refs, Refs, Name});
-prepare_elem(#elem{name = Name, attrs = Attrs}, _, _, _) when not is_list(Attrs) ->
+prepare_elem(#elem{name = Name, attrs = Attrs}, _, _, _, _) when not is_list(Attrs) ->
     bad_spec({wrong_attrs, Attrs, Name});
 prepare_elem(#elem{name = Name, attrs = Attrs, xmlns = XMLNS,
                    cdata = CData, refs = Refs} = Elem,
-             KnownFunctions, AllElems, Opts) ->
+             KnownFunctions, FunSpecs, AllElems, Opts) ->
     case proplists:get_bool(ignore_xmlns, Opts) of
         false when XMLNS == <<>> ->
             bad_spec({empty_xmlns, Name});
@@ -1868,9 +1935,9 @@ prepare_elem(#elem{name = Name, attrs = Attrs, xmlns = XMLNS,
             ok
     end,
     NewAttrs = lists:map(
-                 fun(Attr) -> prepare_attr(Name, Attr, KnownFunctions) end,
+                 fun(Attr) -> prepare_attr(Name, Attr, KnownFunctions, FunSpecs) end,
                  Attrs),
-    NewCData = prepare_cdata(Name, CData, KnownFunctions),
+    NewCData = prepare_cdata(Name, CData, KnownFunctions, FunSpecs),
     NewRefs = lists:map(
                 fun(Ref) -> prepare_ref(Name, Ref, AllElems) end,
                 Refs),
@@ -1904,25 +1971,31 @@ prepare_ref(Name, #ref{name = RefName, label = Label} = Ref, AllElems) ->
 prepare_ref(Name, Junk, _) ->
     bad_spec({not_ref_spec, Junk, Name}).
 
-prepare_default('$unset', undefined, false) -> <<"">>;
-prepare_default('$unset', _DecFun, _IsRequired) -> undefined;
-prepare_default(Default, _DecFun, false) -> Default;
-prepare_default(Default, _DecFun, true) ->
+prepare_default('$unset', DecFun, _IsRequired, FunSpecs) ->
+    T = get_fun_return_type(DecFun, FunSpecs),
+    case erl_types:t_is_binary(T) of
+	true -> <<"">>;
+	_ -> undefined
+    end;
+prepare_default(Default, _DecFun, false, _FunSpecs) ->
+    Default;
+prepare_default(Default, _DecFun, true, _FunSpecs) ->
     bad_spec({default_must_be_unset, Default}).
 
-prepare_attr(Name, #attr{name = AName}, _)
+prepare_attr(Name, #attr{name = AName}, _, _)
   when not is_binary(AName) ->
     bad_spec({wrong_attr_name, AName, Name});
-prepare_attr(Name, #attr{name = AName, label = Label}, _)
+prepare_attr(Name, #attr{name = AName, label = Label}, _, _)
   when not is_atom(Label) ->
     bad_spec({wrong_attr_label, Label, AName, Name});
-prepare_attr(Name, #attr{name = AName, required = Req}, _)
+prepare_attr(Name, #attr{name = AName, required = Req}, _, _)
   when not (Req == false orelse Req == true) ->
     bad_spec({wrong_attr_required, Req, AName, Name});
 prepare_attr(Name, #attr{name = AName, label = Label,
 			 default = Default, required = IsRequired,
-                         dec = DecF, enc = EncF} = Attr, KnownFunctions) ->
-    NewDefault = prepare_default(Default, DecF, IsRequired),
+                         dec = DecF, enc = EncF} = Attr,
+	     KnownFunctions, FunSpecs) ->
+    NewDefault = prepare_default(Default, DecF, IsRequired, FunSpecs),
     NewDecFun = prep_dec_fun(DecF, KnownFunctions),
     NewEncFun = prep_enc_fun(EncF, KnownFunctions),
     case (is_label(Label) or (Label == undefined)) of
@@ -1931,19 +2004,19 @@ prepare_attr(Name, #attr{name = AName, label = Label,
         true ->
             Attr#attr{dec = NewDecFun, enc = NewEncFun, default = NewDefault}
     end;
-prepare_attr(Name, Junk, _) ->
+prepare_attr(Name, Junk, _, _) ->
     bad_spec({not_attr_spec, Junk, Name}).
 
-prepare_cdata(Name, #cdata{label = Label}, _)
+prepare_cdata(Name, #cdata{label = Label}, _, _)
   when not is_atom(Label) ->
     bad_spec({wrong_cdata_label, Label, Name});
-prepare_cdata(Name, #cdata{required = Req}, _)
+prepare_cdata(Name, #cdata{required = Req}, _, _)
   when not (Req == false orelse Req == true) ->
     bad_spec({wrong_cdata_required, Req, Name});
 prepare_cdata(Name, #cdata{label = Label, dec = DecF, enc = EncF,
 			   default = Default, required = IsRequired} = CData,
-                 KnownFunctions) ->
-    NewDefault = prepare_default(Default, DecF, IsRequired),
+                 KnownFunctions, FunSpecs) ->
+    NewDefault = prepare_default(Default, DecF, IsRequired, FunSpecs),
     NewDecFun = prep_dec_fun(DecF, KnownFunctions),
     NewEncFun = prep_enc_fun(EncF, KnownFunctions),
     case (is_label(Label) or (Label == undefined)) of
@@ -1952,7 +2025,7 @@ prepare_cdata(Name, #cdata{label = Label, dec = DecF, enc = EncF,
         true ->
             CData#cdata{enc = NewEncFun, dec = NewDecFun, default = NewDefault}
     end;
-prepare_cdata(Name, Junk, _) ->
+prepare_cdata(Name, Junk, _, _) ->
     bad_spec({not_cdata_spec, Junk, Name}).
 
 get_dups(L) ->
