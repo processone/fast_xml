@@ -1853,7 +1853,7 @@ get_label_type(Label, Elem, Dict, FunSpecs, Opts) ->
             if Max == 1 ->
                     {Type, Default, IsRequired};
 	       ?is_raw_type(Type) ->
-		    {Type, [], false};
+		    {{type, element(2, Type), list, [Type]}, [], false};
                true ->
                     {erl_types:t_list(
                        erl_types:t_subtract(
