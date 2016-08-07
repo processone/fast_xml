@@ -1,3 +1,7 @@
+# Version 1.1.15
+
+* Update to p1_utils 1.0.5 (Mickaël Rémond)
+
 # Version 1.1.14
 
 * Erlang OTP R19 compliance (Paweł Chmielowski)
