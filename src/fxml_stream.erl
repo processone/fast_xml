@@ -25,6 +25,8 @@
 
 -author('alexey@process-one.net').
 
+-compile(no_native).
+
 -export([new/1, new/2, new/3, parse/2, close/1, reset/1,
 	 change_callback_pid/2, parse_element/1]).
 

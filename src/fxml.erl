@@ -25,6 +25,8 @@
 
 -author('alexey@process-one.net').
 
+-compile(no_native).
+
 -export([element_to_binary/1,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
