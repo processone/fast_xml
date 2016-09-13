@@ -522,11 +522,16 @@ make_top_encoders(TaggedSpecs, Opts) ->
 				   _ ->
 				       undefined
 			       end,
-                  EncodeResult = labels_to_underscores(Result),
-		  NSResult = labels_to_underscores(Result, [XMLNSLabel]),
-		  TagResult = labels_to_underscores(Result),
                   Var = label_to_var(prepare_label(undefined, Name)),
 		  HasXMLNSAttr = XMLNSLabel /= undefined,
+		  EncodeResult = if HasXMLNSAttr and not is_list(XMLNS) ->
+					 labels_to_underscores(
+					   Result, [], [{XMLNSLabel, XMLNS}]);
+				    true ->
+					 labels_to_underscores(Result)
+				 end,
+		  NSResult = labels_to_underscores(Result, [XMLNSLabel]),
+		  TagResult = labels_to_underscores(Result),
                   try
                       [H|_]= tuple_to_list(Result),
                       true = is_atom(H),
@@ -582,8 +587,8 @@ make_top_encoders(TaggedSpecs, Opts) ->
 		    none,
 		    [?AST(El)]),
     [erl_syntax:function(?AST(encode), [XmlElClause|EncClauses]),
-     erl_syntax:function(?AST(get_name), TagClauses),
-     erl_syntax:function(?AST(get_ns), NSClauses)].
+     erl_syntax:function(?AST(get_name), lists:usort(TagClauses)),
+     erl_syntax:function(?AST(get_ns), lists:usort(NSClauses))].
 
 make_printer(TaggedSpecs, PredefRecords) ->
     PassClause = erl_syntax:clause(
@@ -1643,6 +1648,9 @@ labels_to_underscores(Term) ->
     labels_to_underscores(Term, []).
 
 labels_to_underscores(Term, Except) ->
+    labels_to_underscores(Term, Except, []).
+
+labels_to_underscores(Term, Except, Replace) ->
     erl_syntax_lib:map(
       fun(T) ->
               try
@@ -1652,7 +1660,12 @@ labels_to_underscores(Term, Except) ->
 		      true ->
 			  label_to_var(Label);
 		      false ->
-			  ?AST(_)
+			  case lists:keyfind(Label, 1, Replace) of
+			      {_, Value} ->
+				  abstract(Value);
+			      false ->
+				  ?AST(_)
+			  end
 		  end
               catch _:_ ->
                       T
@@ -2064,7 +2077,10 @@ check_labels(#elem{result = Result, attrs = Attrs,
                           L
                   end, group_refs(Refs)),
     AllLabels = AttrLabels ++ [CDataLabel] ++ RefLabels,
-    case get_dups(ResultLabels) of
+    case get_dups(lists:filter(
+		    fun('$_') -> false;
+		       (_) -> true
+		    end, ResultLabels)) of
         Dups1 when Dups1 /= [] ->
             bad_spec({duplicated_labels, Dups1});
         _ ->
