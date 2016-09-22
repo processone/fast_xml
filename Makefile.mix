@@ -9,19 +9,19 @@ CFLAGS += -I$(ERLANG_PATH)
 LDFLAGS += -lexpat
 
 ifneq ($(OS),Windows_NT)
-	CFLAGS += -fPIC
+  CFLAGS += -fPIC
 
   ifeq ($(shell uname),Darwin)
-		LDFLAGS += -dynamiclib -undefined dynamic_lookup
-	endif
+    LDFLAGS += -dynamiclib -undefined dynamic_lookup
+  endif
 
-  ifeq($(shell uname),FreeBSD)
+  ifeq ($(shell uname),FreeBSD)
     CFLAGS  += -I/usr/local/include
     LDFLAGS += -L/usr/local/lib
   endif
 
   ifeq ($(shell uname),Linux)
-		LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
+    LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
   endif
 endif
 
