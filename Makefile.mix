@@ -11,7 +11,7 @@ LDFLAGS += -lexpat
 ifneq ($(OS),Windows_NT)
 	CFLAGS += -fPIC
 
-	ifeq ($(shell uname),Darwin)
+  ifeq ($(shell uname),Darwin)
 		LDFLAGS += -dynamiclib -undefined dynamic_lookup
 	endif
 
@@ -20,12 +20,10 @@ ifneq ($(OS),Windows_NT)
     LDFLAGS += -L/usr/local/lib
   endif
 
-       ifeq ($(shell uname),Linux)
+  ifeq ($(shell uname),Linux)
 		LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
-        endif
+  endif
 endif
-
-if
 
 .PHONY: all fast_xml clean
 
