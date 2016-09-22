@@ -412,6 +412,23 @@ element_to_binary_test() ->
 					     <<"http://jabber.org/protocol/disco#info">>}],
 				   children = []}]})).
 
+element_to_header_test() ->
+    ?assertEqual(
+       <<"<?xml version='1.0'?><stream:stream "
+	 "xmlns:stream='http://etherx.jabber.org/streams' "
+	 "xmlns='jabber:server' xmlns:db='jabber:server:dialback' "
+	 "id='4774242664715222330' version='1.0'>">>,
+       fxml:element_to_header(
+	 #xmlel{name = <<"stream:stream">>,
+		attrs = [{<<"xmlns:stream">>,<<"http://etherx.jabber.org/streams">>},
+			 {<<"xmlns">>,<<"jabber:server">>},
+			 {<<"xmlns:db">>,<<"jabber:server:dialback">>},
+			 {<<"id">>,<<"4774242664715222330">>},
+			 {<<"version">>,<<"1.0">>}]})).
+
+element_to_header_xmlcdata_test() ->
+    ?assertError(badarg, fxml:element_to_header({xmlcdata, <<"">>})).
+
 crypt_test() ->
     ?assertEqual(
        <<"a&amp;b&lt;c&gt;d&quot;e&apos;f">>,

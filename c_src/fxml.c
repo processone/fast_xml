@@ -44,7 +44,7 @@ struct buf {
   unsigned char *b;
 };
 
-static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el);
+static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el, int is_header);
 
 static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
 {
@@ -165,7 +165,7 @@ static int make_elements(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM els)
   int ret = 0;
 
   while (enif_get_list_cell(env, els, &head, &tail)) {
-    ret = make_element(env, rbuf, head);
+    ret = make_element(env, rbuf, head, 0);
     if (ret) {
       els = tail;
     } else {
@@ -211,14 +211,14 @@ static int make_attrs(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM attrs)
   return ret;
 }
 
-static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el)
+static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el, int is_header)
 {
   ErlNifBinary cdata, name;
   const ERL_NIF_TERM *tuple;
   int arity, ret = 0;
 
   if (enif_get_tuple(env, el, &arity, &tuple)) {
-    if (arity == 2) {
+    if (arity == 2 && !is_header) {
       if (!ENIF_COMPARE(tuple[0], atom_xmlcdata)) {
 	if (enif_inspect_iolist_as_binary(env, tuple[1], &cdata)) {
 	  xml_encode(env, rbuf, cdata.data, cdata.size);
@@ -229,11 +229,15 @@ static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el)
     if (arity == 4) {
       if (!ENIF_COMPARE(tuple[0], atom_xmlelement)) {
 	if (enif_inspect_iolist_as_binary(env, tuple[1], &name)) {
+	  if (is_header)
+	    buf_add_str(env, rbuf, "<?xml version='1.0'?>", 21);
 	  buf_add_char(env, rbuf, '<');
 	  buf_add_str(env, rbuf, (char *)name.data, name.size);
 	  ret = make_attrs(env, rbuf, tuple[2]);
 	  if (ret) {
-	    if (enif_is_empty_list(env, tuple[3])) {
+	    if (is_header) {
+	      buf_add_char(env, rbuf, '>');
+	    } else if (enif_is_empty_list(env, tuple[3])) {
 	      buf_add_str(env, rbuf, "/>", 2);
 	    } else {
 	      buf_add_char(env, rbuf, '>');
@@ -255,7 +259,7 @@ static int make_element(ErlNifEnv* env, struct buf *rbuf, ERL_NIF_TERM el)
 
 static ERL_NIF_TERM element_to(ErlNifEnv* env, int argc,
 			       const ERL_NIF_TERM argv[],
-			       int as_string)
+			       int is_header)
 {
   ErlNifBinary output;
   ERL_NIF_TERM result;
@@ -263,19 +267,12 @@ static ERL_NIF_TERM element_to(ErlNifEnv* env, int argc,
 
   if (argc == 1) {
     rbuf = init_buf(env);
-    if (make_element(env, rbuf, argv[0])) {
-      if (as_string) {
-	(rbuf->b)[rbuf->len] = 0;
-	result = enif_make_string(env, (char *) rbuf->b, ERL_NIF_LATIN1);
+    if (make_element(env, rbuf, argv[0], is_header)) {
+      if (ENIF_ALLOC_BINARY(rbuf->len, &output)) {
+	memcpy(output.data, rbuf->b, rbuf->len);
+	result = enif_make_binary(env, &output);
 	destroy_buf(env, rbuf);
 	return result;
-      }	else {
-	if (ENIF_ALLOC_BINARY(rbuf->len, &output)) {
-	  memcpy(output.data, rbuf->b, rbuf->len);
-	  result = enif_make_binary(env, &output);
-	  destroy_buf(env, rbuf);
-	  return result;
-	};
       };
     };
     destroy_buf(env, rbuf);
@@ -290,9 +287,16 @@ static ERL_NIF_TERM element_to_binary(ErlNifEnv* env, int argc,
   return element_to(env, argc, argv, 0);
 }
 
+static ERL_NIF_TERM element_to_header(ErlNifEnv* env, int argc,
+				      const ERL_NIF_TERM argv[])
+{
+  return element_to(env, argc, argv, 1);
+}
+
 static ErlNifFunc nif_funcs[] =
   {
-    {"element_to_binary", 1, element_to_binary}
+    {"element_to_binary", 1, element_to_binary},
+    {"element_to_header", 1, element_to_header}
   };
 
 ERL_NIF_INIT(fxml, nif_funcs, load, NULL, NULL, NULL)

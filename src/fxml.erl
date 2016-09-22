@@ -27,7 +27,7 @@
 
 -compile(no_native).
 
--export([element_to_binary/1,
+-export([element_to_binary/1, element_to_header/1,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
 	 get_attr/2, get_attr_s/2, get_tag_attr/2,
@@ -54,6 +54,11 @@ load_nif() ->
 -spec element_to_binary(El :: xmlel() | cdata()) -> binary().
 
 element_to_binary(_El) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec element_to_header(El :: xmlel()) -> binary().
+
+element_to_header(_El) ->
     erlang:nif_error(nif_not_loaded).
 
 crypt(S) ->
