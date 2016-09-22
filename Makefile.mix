@@ -15,12 +15,12 @@ ifneq ($(OS),Windows_NT)
 		LDFLAGS += -dynamiclib -undefined dynamic_lookup
 	endif
 
-  ifeq($(OS),FreeBSD)
+  ifeq($(shell uname),FreeBSD)
     CFLAGS  += -I/usr/local/include
     LDFLAGS += -L/usr/local/lib
   endif
 
-        ifeq ($(shell uname),Linux)
+       ifeq ($(shell uname),Linux)
 		LDFLAGS += -shared -L$(ERL_INTERFACE_PATH) -lerl_interface -lei
         endif
 endif
