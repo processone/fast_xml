@@ -30,8 +30,8 @@
 %% Runtime API
 -export([format_error/1, get_attr/2]).
 %% Runtime built-in decoders/encoders
--export([dec_int/1, dec_int/3, dec_enum/2,
-         enc_int/1, enc_enum/1, not_empty/1]).
+-export([dec_int/1, dec_int/3, dec_enum/2, enc_int/1, enc_enum/1, not_empty/1,
+	enc_xmlns_attrs/2, choose_top_xmlns/3]).
 
 -include("fxml_gen.hrl").
 -include("fxml.hrl").
@@ -56,7 +56,7 @@ compile(Path, Opts) ->
         ok ->
             ok;
         Err ->
-            io:format("compile failed: ~p~n", [Err]),
+            io:format("failed to compile ~p: ~p~n", [Path, Err]),
             Err
     end.
 
@@ -134,13 +134,26 @@ format_error({missing_cdata, <<>>, Tag, XMLNS}) ->
       "/> qualified by namespace '", XMLNS/binary, "'">>;
 format_error({unknown_tag, Tag, XMLNS}) ->
     <<"Unknown tag <", Tag/binary,
-      "/> qualified by namespace '", XMLNS/binary, "'">>.
+      "/> qualified by namespace '", XMLNS/binary, "'">>;
+format_error({missing_tag_xmlns, Tag}) ->
+    <<"Missing namespace for tag <", Tag/binary, "/>">>.
 
 get_attr(Attr, Attrs) ->
     case lists:keyfind(Attr, 1, Attrs) of
         {_, Val} -> Val;
         false -> <<>>
     end.
+
+enc_xmlns_attrs(XMLNS, XMLNS) -> [];
+enc_xmlns_attrs(XMLNS, _) -> [{<<"xmlns">>, XMLNS}].
+
+choose_top_xmlns(<<>>, NSList, TopXMLNS) ->
+    case lists:member(TopXMLNS, NSList) of
+	true -> TopXMLNS;
+	false -> hd(NSList)
+    end;
+choose_top_xmlns(XMLNS, _, _) ->
+    XMLNS.
 
 %%====================================================================
 %% Internal functions
@@ -249,7 +262,9 @@ compile(TaggedElems0, Forms, Path, Opts) ->
                      {dec_enum, 2},
                      {enc_int, 1},
                      {get_attr, 2},
-                     {enc_enum, 1}]})]),
+                     {enc_enum, 1},
+		     {choose_top_xmlns, 3},
+		     {enc_xmlns_attrs, 2}]})]),
     Hdr = header(FileName),
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile, Exports|NewAST]),
     case file:write_file(
@@ -302,6 +317,8 @@ make_aux_funs() ->
                           {enc_int, 1} -> true;
                           {enc_enum, 1} -> true;
                           {get_attr, 2} -> true;
+			  {choose_top_xmlns, 3} -> true;
+			  {enc_xmlns_attrs, 2} -> true;
                           _ -> false
                       end
               end, AbsCode);
@@ -454,45 +471,65 @@ make_top_decoders(TaggedSpecs1, ModName, false) ->
 			    [TE]
 		    end, TaggedSpecs1),
     C0 = ?AST(IgnoreEls = proplists:get_bool(ignore_els, Opts)),
-    C1 = lists:map(
+    C1 = lists:flatmap(
            fun({Tag, #elem{xmlns = XMLNS, name = Name}}) ->
+                   [erl_syntax:clause(
+		      [?AST({'?a(Name)', '?a(XMLNS)', _})],
+		      none,
+		      [make_function_call(
+			 make_dec_fun_name([Tag]),
+			 [abstract(XMLNS),
+			  ?AST(IgnoreEls),
+			  ?AST(_el)])]),
                    erl_syntax:clause(
-		     [?AST({'?a(Name)', '?a(XMLNS)'})],
+		      [?AST({'?a(Name)', <<>>, '?a(XMLNS)'})],
                      none,
                      [make_function_call(
                         make_dec_fun_name([Tag]),
                         [abstract(XMLNS),
 			 ?AST(IgnoreEls),
-			 ?AST(_el)])])
+			  ?AST(_el)])])]
            end, TaggedSpecs),
-    C2 = lists:map(
+    C2 = lists:flatmap(
            fun({_Tag, #elem{xmlns = XMLNS, name = Name}}) ->
+                   [erl_syntax:clause(
+		      [?AST({'?a(Name)', '?a(XMLNS)', _})],
+		      none,
+		      [?AST(true)]),
                    erl_syntax:clause(
-		     [?AST({'?a(Name)', '?a(XMLNS)'})],
+		      [?AST({'?a(Name)', <<>>, '?a(XMLNS)'})],
                      none,
-                     [?AST(true)])
+		      [?AST(true)])]
            end, TaggedSpecs),
-    NilClause = erl_syntax:clause(
-                  [?AST({_name, _xmlns})],
+    NilClauses = [erl_syntax:clause(
+		    [?AST({_name, <<>>, <<>>})],
                   none,
                   [?AST(erlang:error(
-			  {'?a(ModName)', {unknown_tag, _name, _xmlns}}))]),
-    [make_function(
-       "decode",
-       [?AST(_el)],
-       [?AST(decode(_el, []))]),
+			    {'?a(ModName)', {missing_tag_xmlns, _name}}))]),
+		  erl_syntax:clause(
+		    [?AST({_name, <<>>, _})],
+		    none,
+		    [?AST(erlang:error(
+			    {'?a(ModName)', {unknown_tag, _name, TopXMLNS}}))]),
+		  erl_syntax:clause(
+		    [?AST({_name, _xmlns, _})],
+		    none,
+		    [?AST(erlang:error(
+			    {'?a(ModName)', {unknown_tag, _name, _xmlns}}))])],
+    [make_function("decode", [?AST(_el)], [?AST(decode(_el, <<>>, []))]),
+     make_function("decode", [?AST(_el), ?AST(Opts)], [?AST(decode(_el, <<>>, Opts))]),
      make_function(
        "decode",
-       [?AST({xmlel, _name, _attrs, _} = _el), ?AST(Opts)],
+       [?AST({xmlel, _name, _attrs, _} = _el), ?AST(TopXMLNS), ?AST(Opts)],
        [C0,
 	erl_syntax:case_expr(
-	  ?AST({_name, get_attr(<<"xmlns">>, _attrs)}),
-          C1 ++ [NilClause])]),
+	  ?AST({_name, get_attr(<<"xmlns">>, _attrs), TopXMLNS}),
+          C1 ++ NilClauses)]),
      make_function(
        "is_known_tag",
-       [?AST({xmlel, _name, _attrs, _} = _el)],
+       [?AST({xmlel, _name, _attrs, _} = _el), ?AST(TopXMLNS)],
        [erl_syntax:case_expr(
-	  ?AST({_name, get_attr(<<"xmlns">>, _attrs)}),
+	  ?AST({_name, get_attr(<<"xmlns">>, _attrs), TopXMLNS}),
           C2 ++ [erl_syntax:clause(
                    [?AST(_)], none, [?AST(false)])])])].
 
@@ -530,6 +567,8 @@ make_top_encoders(TaggedSpecs, Opts) ->
 				    true ->
 					 labels_to_underscores(Result)
 				 end,
+		  EncodeResultAux = labels_to_underscores(
+				      Result, [], [{XMLNSLabel, <<>>}]),
 		  NSResult = labels_to_underscores(Result, [XMLNSLabel]),
 		  TagResult = labels_to_underscores(Result),
                   try
@@ -541,21 +580,23 @@ make_top_encoders(TaggedSpecs, Opts) ->
 		      true = lists:member(Tag, Tags),
 		      IsDuplicated = lists:member(Result, OtherResults),
 		      AlreadySeen = lists:member(Result, Seen),
-                      XMLNSAttrs = if IgnoreXMLNS or HasXMLNSAttr
-				      or is_list(XMLNS) or IsDuplicated ->
-                                           ?AST([]);
-				      true ->
-					   ?AST([{<<"xmlns">>, '?a(XMLNS)'}])
-                                   end,
                       {if AlreadySeen ->
 			       EncAcc;
 			  true ->
+			       Call = [make_function_call(
+					 make_enc_fun_name([Tag]),
+					 [Var, ?AST(TopXMLNS)])],
 			       [erl_syntax:clause(
-				  [?AST('?EncodeResult' = '?Var')],
-				  none,
-				  [make_function_call(
-				     make_enc_fun_name([Tag]),
-				     [Var, XMLNSAttrs])])|EncAcc]
+				  [?AST('?EncodeResult' = '?Var'), ?AST(TopXMLNS)],
+				  none, Call)] ++
+				   if HasXMLNSAttr and not is_list(XMLNS) ->
+					   [erl_syntax:clause(
+					      [?AST('?EncodeResultAux' = '?Var'),
+					       ?AST(TopXMLNS = '?a(XMLNS)')],
+					      none, Call)];
+				      true ->
+					   []
+				   end ++ EncAcc
 		       end,
 		       if IgnoreXMLNS or IsDuplicated ->
 			       NSAcc;
@@ -564,7 +605,9 @@ make_top_encoders(TaggedSpecs, Opts) ->
 				  [NSResult], none,
 				  [label_to_var(XMLNSLabel)])|NSAcc];
 			  is_list(XMLNS) ->
-			       NSAcc;
+			       [erl_syntax:clause(
+				  [NSResult], none,
+				  [abstract(hd(XMLNS))])|NSAcc];
 			  true ->
 			       [erl_syntax:clause(
 				  [NSResult], none,
@@ -583,10 +626,11 @@ make_top_encoders(TaggedSpecs, Opts) ->
                   end
           end, {[], [], [], []}, TaggedSpecs),
     XmlElClause = erl_syntax:clause(
-		    [?AST({xmlel, _, _, _} = El)],
+		    [?AST({xmlel, _, _, _} = El), ?AST(_)],
 		    none,
 		    [?AST(El)]),
-    [erl_syntax:function(?AST(encode), [XmlElClause|EncClauses]),
+    [make_function(encode, [?AST(_el)], [?AST(encode(_el, <<>>))]),
+     erl_syntax:function(?AST(encode), [XmlElClause|EncClauses]),
      erl_syntax:function(?AST(get_name), lists:usort(TagClauses)),
      erl_syntax:function(?AST(get_ns), lists:usort(NSClauses))].
 
@@ -1119,7 +1163,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
 			       erl_syntax:clause(
 				 [], none,
 				 [erl_syntax:case_expr(
-				    ?AST(is_known_tag(_el)),
+				    ?AST(is_known_tag(_el, __TopXMLNS)),
 				   [erl_syntax:clause(
 				      [?AST(true)],
 				      none,
@@ -1129,7 +1173,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
 					  ?AST(__IgnoreEls),
 					  ?AST(_els)|CDataVars ++ ElemVars] ++
 					     [erl_syntax:list(
-						[?AST(decode(_el))],
+						[?AST(decode(_el, __TopXMLNS, []))],
 						label_to_var('$_els'))])]),
 				    erl_syntax:clause(
 				      [?AST(false)],
@@ -1168,7 +1212,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
 			       erl_syntax:clause(
 				 [], none,
 				 [erl_syntax:case_expr(
-				    ?AST(is_known_tag(_el)),
+				    ?AST(is_known_tag(_el, __TopXMLNS)),
 				    [erl_syntax:clause(
 				       [?AST(true)],
 				       none,
@@ -1178,7 +1222,7 @@ make_els_dec_fun(FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
 					   ?AST(__IgnoreEls),
 					   ?AST(_els)|CDataVars ++ ElemVars] ++
 					      [erl_syntax:list(
-						 [?AST(decode(_el))],
+						 [?AST(decode(_el, __TopXMLNS, []))],
 						 label_to_var('$_els'))]
 					  ++ [label_to_var('$_xmls')])]),
 				     erl_syntax:clause(
@@ -1270,18 +1314,19 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
             []
     end.
 
-make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
+make_ref_enc_funs(Elem, Tag, AllElems) ->
     lists:map(
       fun({L, [#ref{min = Min, max = Max, default = Default}|_] = Refs}) ->
               DefaultClause = if Min == 0, Max == 1 ->
                                       [erl_syntax:clause(
-                                         [abstract(Default), ?AST(_acc)],
+                                         [abstract(Default), ?AST(__TopXMLNS),
+					  ?AST(_acc)],
                                          none, [?AST(_acc)])];
                                  Min == 1, Max == 1 ->
                                       [];
                                  true ->
                                       [erl_syntax:clause(
-                                         [?AST([]), ?AST(_acc)],
+                                         [?AST([]), ?AST(__TopXMLNS), ?AST(_acc)],
                                          none, [?AST(_acc)])]
                               end,
               Var = label_to_var(L),
@@ -1289,22 +1334,15 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                   lists:map(
                     fun(#ref{name = RefName, max = 1}) ->
                             RefElem = get_elem_by_ref(RefName, AllElems),
-                            XMLNS = RefElem#elem.xmlns,
-                            XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
-					     true ->
-                                                 ?AST([]);
-					     {false, NS} ->
-						 ?AST([{<<"xmlns">>, '?a(NS)'}])
-                                         end,
                             Pattern =
                                 if length(Refs) > 1 ->
                                         MatchVar = erl_syntax:match_expr(
                                                      labels_to_underscores(
                                                        RefElem#elem.result),
                                                      Var),
-                                        [MatchVar, ?AST(_acc)];
+                                        [MatchVar, ?AST(__TopXMLNS), ?AST(_acc)];
                                    true ->
-                                        [Var, ?AST(_acc)]
+                                        [Var, ?AST(__TopXMLNS), ?AST(_acc)]
                                 end,
                             erl_syntax:clause(
                               Pattern,
@@ -1312,17 +1350,10 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                               [erl_syntax:list(
                                  [make_function_call(
                                     make_enc_fun_name([RefName]),
-                                    [Var, XMLNSAttrs])],
+                                    [Var, ?AST(__TopXMLNS)])],
                                  ?AST(_acc))]);
                        (#ref{name = RefName}) ->
                             RefElem = get_elem_by_ref(RefName, AllElems),
-                            XMLNS = RefElem#elem.xmlns,
-                            XMLNSAttrs = case is_my_top_xmlns(XMLNS, TopXMLNS) of
-					     true ->
-                                                 ?AST([]);
-					     {false, NS} ->
-						 ?AST([{<<"xmlns">>, '?a(NS)'}])
-                                         end,
                             Pattern =
                                 if length(Refs) > 1 ->
                                         erl_syntax:match_expr(
@@ -1333,15 +1364,16 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
                                         Var
                                 end,
                             erl_syntax:clause(
-                              [?AST(['?Pattern' | _els]), ?AST(_acc)],
+                              [?AST(['?Pattern' | _els]), ?AST(__TopXMLNS), ?AST(_acc)],
                               none,
                               [make_function_call(
                                  make_enc_fun_name([L,Tag]),
                                  [?AST(_els),
+				  ?AST(__TopXMLNS),
                                   erl_syntax:list(
                                     [make_function_call(
                                        make_enc_fun_name([RefName]),
-                                       [Var, XMLNSAttrs])],
+                                       [Var, ?AST(__TopXMLNS)])],
                                     ?AST(_acc))])])
                     end, Refs),
               erl_syntax:function(
@@ -1350,7 +1382,7 @@ make_ref_enc_funs(#elem{xmlns = TopXMLNS} = Elem, Tag, AllElems) ->
       end, group_refs(Elem#elem.refs)).
 
 make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
-                        name = ElemName,
+                        name = ElemName, xmlns = XMLNS,
                         cdata = CData, refs = Refs} = Elem,
                   Tag, AllElems) ->
     CDataLabel = CData#cdata.label,
@@ -1358,10 +1390,27 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
     HaveRefs = Refs /= [],
     HaveXMLs = have_label(Result, '$_xmls'),
     HaveEls = have_label(Result, '$_els'),
+    NewTopXMLNSCall =
+	make_function_call(
+	  choose_top_xmlns,
+	  case lists:keyfind(<<"xmlns">>, #attr.name, Attrs) of
+	      #attr{label = L, name = N} ->
+		  if is_list(XMLNS) ->
+			  [label_to_var(prepare_label(L, N)),
+			   erl_syntax:list([abstract(NS) || NS <- XMLNS])];
+		     true ->
+			  [label_to_var(prepare_label(L, N)),
+			   erl_syntax:list([abstract(XMLNS)])]
+		  end;
+	      false when is_list(XMLNS) ->
+		  [?AST(<<>>), erl_syntax:list([abstract(NS) || NS <- XMLNS])];
+	      false ->
+		  [abstract(XMLNS), ?AST([])]
+	  end ++ [?AST(__TopXMLNS)]),
     SubElGenerator = case have_label(Result, '$_els') of
                          true ->
                              erl_syntax:list_comp(
-			       ?AST(encode(_el)),
+			       ?AST(encode(_el, __NewTopXMLNS)),
                                [erl_syntax:generator(
                                   ?AST(_el),
                                   label_to_var('$_els'))]);
@@ -1387,7 +1436,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 			Var = label_to_var(Label),
 			make_function_call(
 			  make_enc_fun_name([Label,Tag]),
-			  [Var, Acc])
+			  [Var, ?AST(__NewTopXMLNS), Acc])
 		end, ?AST([]), group_refs(Refs)),
     CDataFun = if HaveRefs and HaveCData ->
 		       make_function_call(
@@ -1414,18 +1463,22 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 		     ?AST([])
 	     end,
     AttrFun = lists:foldl(
-                fun(#attr{name = AttrName, label = AttrLabel}, Acc) ->
+                fun(#attr{name = AttrName, label = AttrLabel}, Acc)
+		      when AttrName /= <<"xmlns">> ->
                         Var = label_to_var(prepare_label(AttrLabel, AttrName)),
                         make_function_call(
                           make_enc_fun_name([AttrName,attr,Tag]),
-                          [Var, Acc])
-                end, ?AST(_xmlns_attrs), Attrs),
+                          [Var, Acc]);
+		   (_, Acc) ->
+			Acc
+                end, ?AST(enc_xmlns_attrs(__NewTopXMLNS, __TopXMLNS)), Attrs),
     [erl_syntax:function(
        erl_syntax:atom(make_enc_fun_name([Tag])),
        [erl_syntax:clause(
-          [subst_labels(Result), ?AST(_xmlns_attrs)],
+          [subst_labels(Result), ?AST(__TopXMLNS)],
           none,
-          [?AST(_els = '?ResFun'),
+          [?AST(__NewTopXMLNS = '?NewTopXMLNSCall'),
+	   ?AST(_els = '?ResFun'),
 	   ?AST(_attrs = '?AttrFun'),
 	   ?AST({xmlel, '?a(ElemName)', _attrs, _els})
           ])])] ++ make_ref_enc_funs(Elem, Tag, AllElems).
@@ -1484,6 +1537,8 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
 		 ?AST(_val)], none, [Catch]),
     [erl_syntax:function(erl_syntax:atom(FunName), [Clause1, Clause2])].
 
+make_encoding_MFA(_, <<"xmlns">>, _, _, _) ->
+    [];
 make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
     Clause1 = if Required ->
                       [];
@@ -1575,20 +1630,6 @@ abstract(Term) ->
 
 a(Term) ->
     abstract(Term).
-
-is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(XMLNS), is_list(TopXMLNS) ->
-    case sets:is_disjoint(sets:from_list(XMLNS), sets:from_list(TopXMLNS)) of
-	true ->
-	    {false, hd(XMLNS)};
-	false ->
-	    true
-    end;
-is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(XMLNS) ->
-    is_my_top_xmlns(XMLNS, [TopXMLNS]);
-is_my_top_xmlns(XMLNS, TopXMLNS) when is_list(TopXMLNS) ->
-    is_my_top_xmlns([XMLNS], TopXMLNS);
-is_my_top_xmlns(XMLNS, TopXMLNS) ->
-    is_my_top_xmlns([XMLNS], [TopXMLNS]).
 
 label_to_var(Label) ->
     case atom_to_list(Label) of
