@@ -69,7 +69,7 @@ IsRebar3 = case application:get_key(rebar, vsn) of
                    [VSN1 | _] = string:tokens(VSN, "-"),
 		   {Num, _} = string:to_integer(erlang:system_info(otp_release)),
 		   case Num of
-			   N when is_integer(N), N >= -> 
+			   N when is_integer(N), N >= 18 -> 
 				   [Maj | _] = string:tokens(VSN1, ".");
 			   _ ->
 				   [Maj, Min, Patch] = string:tokens(VSN1, ".")
