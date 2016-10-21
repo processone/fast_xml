@@ -734,7 +734,7 @@ subst_labels(Term, PredefRecords) ->
 		RecName = erl_syntax:atom_value(H),
 		RecFields = dict:fetch(RecName, PredefRecords),
 		Vars = lists:map(
-			 fun({T, {_, Default}}) ->
+			 fun({T, {_, {Default, _}}}) ->
 				 AbsDefault = if Default == none ->
 						      ?AST(undefined);
 						 true ->
@@ -1745,7 +1745,7 @@ get_fun_return_type({dec_int, []}, _, _) ->
 get_fun_return_type({F, Args}, FunSpecs, _) ->
     case dict:find({F, length(Args) + 1}, FunSpecs) of
 	{ok, Spec} ->
-	    Type = erl_types:t_from_form(Spec, sets:new(), mod, dict:new()),
+	    Type = t_from_form(Spec),
 	    case erl_types:t_is_any(Type) of
 		true -> Spec;
 		false -> Type
@@ -1756,7 +1756,7 @@ get_fun_return_type({F, Args}, FunSpecs, _) ->
 get_fun_return_type({M, F, Args}, FunSpecs, _) ->
     case dict:find({M, F, length(Args) + 1}, FunSpecs) of
 	{ok, Spec} ->
-	    Type = erl_types:t_from_form(Spec, sets:new(), mod, dict:new()),
+	    Type = t_from_form(Spec),
 	    case erl_types:t_is_any(Type) of
 		true -> Spec;
 		false -> Type
@@ -1872,7 +1872,7 @@ extract_labels_from_term(Term) ->
       end, [], abstract(Term)).
 
 get_label_type(Label, Elem, Dict, FunSpecs, Opts) ->
-    XMLType = erl_types:t_remote(fxml, xmlel, []),
+    XMLType = t_remote(fxml, xmlel),
     case get_spec_by_label(Label, Elem) of
         sub_els ->
 	    T = case proplists:get_value(add_type_specs, Opts) of
@@ -2415,3 +2415,23 @@ transform_spec_to_form([{'-', L0}, {atom, _, 'xml'}, {'(', _}|T]) ->
     end;
 transform_spec_to_form(_) ->
     not_spec.
+
+-ifdef(HAVE_REMOTE_TYPES).
+t_from_form(Spec) ->
+    erl_types:t_from_form(Spec, sets:new(), mod, dict:new()).
+
+t_remote(Mod, Type) ->
+    erl_types:t_remote(Mod, Type, []).
+-else.
+t_from_form(Spec) ->
+    {T, _} = erl_types:t_from_form(
+	       Spec, sets:new(), {type, {mod, foo, 1}}, dict:new(),
+	       erl_types:var_table__new(), erl_types:cache__new()),
+    T.
+
+t_remote(Mod, Type) ->
+    D = dict:from_list([{{opaque, Type, []},
+			 {{Mod, 1, 2, []}, type}}]),
+    [T] = erl_types:t_opaque_from_records(D),
+    T.
+-endif.
