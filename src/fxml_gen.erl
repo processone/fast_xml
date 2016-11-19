@@ -387,17 +387,25 @@ record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, FunTypes, Opt
            fun(Label) ->
                    FName = label_to_record_field(Label),
                    case get_label_type(Label, Elem, RecTypes, FunTypes, Opts) of
-		       {FType, undefined, _} when ?is_raw_type(FType) ->
+		       {FType, undefined, true} when ?is_raw_type(FType) ->
 			   [atom_to_string(FName), " :: ",
 			    erl_types:t_form_to_string(FType)];
+		       {FType, undefined, false} when ?is_raw_type(FType) ->
+			   [atom_to_string(FName), " :: ",
+			    "undefined | ", erl_types:t_form_to_string(FType)];
 		       {FType, Default, _} when ?is_raw_type(FType) ->
 			   [atom_to_string(FName), " = ",
                             io_lib:fwrite("~w", [Default]),
                             " :: ", erl_types:t_form_to_string(FType)];
-                       {FType, undefined, _} ->
+                       {FType, undefined, true} ->
                            FType1 = erl_types:t_subtract(
-                                      FType, erl_types:t_atom(undefined)),
+				      FType, erl_types:t_atom(undefined)),
                            [atom_to_string(FName), " :: ",
+                            erl_types:t_to_string(FType1, RecDict)];
+		       {FType, undefined, false} ->
+			   FType1 = erl_types:t_sup(
+				      FType, erl_types:t_atom(undefined)),
+			   [atom_to_string(FName), " :: ",
                             erl_types:t_to_string(FType1, RecDict)];
                        {FType, Default, _} ->
                            Type = erl_types:t_sup(
