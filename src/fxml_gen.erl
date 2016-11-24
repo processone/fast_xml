@@ -28,7 +28,7 @@
 %% Generator API
 -export([compile/1, compile/2]).
 %% Runtime API
--export([format_error/1, get_attr/2]).
+-export([format_error/1, io_format_error/1, get_attr/2]).
 %% Runtime built-in decoders/encoders
 -export([dec_int/1, dec_int/3, dec_enum/2, enc_int/1, enc_enum/1, not_empty/1,
 	enc_xmlns_attrs/2, choose_top_xmlns/3]).
@@ -137,6 +137,25 @@ format_error({unknown_tag, Tag, XMLNS}) ->
       "/> qualified by namespace '", XMLNS/binary, "'">>;
 format_error({missing_tag_xmlns, Tag}) ->
     <<"Missing namespace for tag <", Tag/binary, "/>">>.
+
+io_format_error({bad_attr_value, Attr, Tag, XMLNS}) ->
+    {<<"Bad value of attribute '~s' in tag <~s/> qualified by namespace '~s'">>,
+     [Attr, Tag, XMLNS]};
+io_format_error({bad_cdata_value, <<>>, Tag, XMLNS}) ->
+    {<<"Bad value of cdata in tag <~s/> qualified by namespace '~s'">>,
+     [Tag, XMLNS]};
+io_format_error({missing_tag, Tag, XMLNS}) ->
+    {<<"Missing tag <~s/> qualified by namespace '~s'">>, [Tag, XMLNS]};
+io_format_error({missing_attr, Attr, Tag, XMLNS}) ->
+    {<<"Missing attribute '~s' in tag <~s/> qualified by namespace '~s'">>,
+     [Attr, Tag, XMLNS]};
+io_format_error({missing_cdata, <<>>, Tag, XMLNS}) ->
+    {<<"Missing cdata in tag <~s/> qualified by namespace '~s'">>,
+     [Tag, XMLNS]};
+io_format_error({unknown_tag, Tag, XMLNS}) ->
+    {<<"Unknown tag <~s/> qualified by namespace '~s'">>, [Tag, XMLNS]};
+io_format_error({missing_tag_xmlns, Tag}) ->
+    {<<"Missing namespace for tag <~s/>">>, [Tag]}.
 
 get_attr(Attr, Attrs) ->
     case lists:keyfind(Attr, 1, Attrs) of
@@ -251,7 +270,7 @@ compile(TaggedElems0, Forms, Path, Opts) ->
                              erl_syntax:arity_qualifier(
                                erl_syntax:atom(FN),
                                erl_syntax:integer(Arity))
-                     end, [hd(Printer), {format_error, 1}
+                     end, [hd(Printer), {format_error, 1}, {io_format_error, 1}
                            |Decoders ++ Encoders]))]),
     Compile = erl_syntax:attribute(
                 ?AST(compile),
@@ -311,6 +330,7 @@ make_aux_funs() ->
               fun(T) ->
                       case catch erl_syntax_lib:analyze_function(T) of
                           {format_error, 1} -> true;
+			  {io_format_error, 1} -> true;
                           {dec_int, 3} -> true;
                           {dec_int, 1} -> true;
                           {dec_enum, 2} -> true;
