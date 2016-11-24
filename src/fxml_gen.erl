@@ -2445,8 +2445,14 @@ transform_spec_to_form(_) ->
     not_spec.
 
 -ifdef(HAVE_REMOTE_TYPES).
+-ifdef(HAVE_FROM_FORM0).
+
+t_from_form(Spec) ->
+    erl_types:t_from_form(Spec).
+-else.
 t_from_form(Spec) ->
     erl_types:t_from_form(Spec, sets:new(), mod, dict:new()).
+-endif.
 
 t_remote(Mod, Type) ->
     erl_types:t_remote(Mod, Type, []).
