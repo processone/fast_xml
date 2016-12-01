@@ -1,7 +1,7 @@
 # Version 1.1.18
 
 * Use p1_utils 1.0.6 (Paweł Chmielowski)
-* fix xref with oth 17 (Paweł Chmielowski)
+* fix xref with otp 17 (Paweł Chmielowski)
 
 # Version 1.1.17
 
