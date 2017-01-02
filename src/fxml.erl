@@ -36,7 +36,7 @@
 	 append_subtags/2, get_path_s/2,
 	 replace_tag_attr/3, replace_subtag/2, to_xmlel/1]).
 
--export([load_nif/0]).
+-export([load_nif/0, load_nif/1]).
 
 -include("fxml.hrl").
 -export_type([xmlel/0]).
@@ -44,6 +44,9 @@
 %% Replace element_to_binary/1 with NIF
 load_nif() ->
     SOPath = p1_nif_utils:get_so_path(?MODULE, [fast_xml], "fxml"),
+    load_nif(SOPath).
+
+load_nif(SOPath) ->
     case catch erlang:load_nif(SOPath, 0) of
         ok -> ok;
         Err -> error_logger:warning_msg("unable to load fxml NIF: ~p~n", [Err]),

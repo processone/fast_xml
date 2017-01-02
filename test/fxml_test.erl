@@ -39,7 +39,8 @@ close(State) ->
     ?assertEqual(true, fxml_stream:close(State)).
 
 start_test() ->
-    ?assertEqual(ok, application:start(fast_xml)).
+    ?assertEqual(ok, fxml:load_nif(p1_nif_utils:get_so_path(fxml, [], "fxml"))),
+    ?assertEqual(ok, fxml_stream:load_nif(p1_nif_utils:get_so_path(fxml_stream, [], "fxml_stream"))).
 
 tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
@@ -877,6 +878,3 @@ rpc_empty_response_test() ->
     Result = {response, []},
     ?assertEqual({ok, Result}, fxmlrpc:decode(Response)),
     ?assertEqual(Response, fxmlrpc:encode(Result)).
-
-application_stop_test() ->
-    ?assertEqual(ok, application:stop(fast_xml)).
