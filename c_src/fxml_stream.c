@@ -91,8 +91,6 @@ static attrs_list_t stream_stream_ns_attr = {
   FAKE_BIN("http://etherx.jabber.org/streams")
 };
 
-static char *jabber_client_ns = "jabber:client";
-
 static int same_str_buf(const char *str, const char *buf, size_t buf_len)
 {
   if (strlen(str) != buf_len)
@@ -110,11 +108,6 @@ static char *dup_buf(const char *buf, size_t buf_len)
   res[buf_len] = '\0';
 
   return res;
-}
-
-static char *dup_str(const char *str)
-{
-  return dup_buf(str, strlen(str));
 }
 
 static int dup_to_bin(ErlNifBinary *bin, const char *buf, size_t buf_len)
