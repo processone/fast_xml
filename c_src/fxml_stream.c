@@ -95,6 +95,8 @@ static int same_str_buf(const char *str, const char *buf, size_t buf_len)
 {
   if (strlen(str) != buf_len)
     return 0;
+  if (!buf_len)
+    return 1;
   return memcmp(str, buf, buf_len) == 0;
 }
 
@@ -104,7 +106,8 @@ static char *dup_buf(const char *buf, size_t buf_len)
   if (!res)
     return NULL;
 
-  memcpy(res, buf, buf_len);
+  if (buf_len)
+    memcpy(res, buf, buf_len);
   res[buf_len] = '\0';
 
   return res;
