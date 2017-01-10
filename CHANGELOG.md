@@ -1,3 +1,9 @@
+# Version 1.1.19
+
+* Add checks for empty string (Paweł Chmielowski)
+* Remove unused code (Paweł Chmielowski)
+* Load locally build .so file when performing tests (Paweł Chmielowski)
+
 # Version 1.1.18
 
 * Use p1_utils 1.0.6 (Paweł Chmielowski)

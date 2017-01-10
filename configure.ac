@@ -2,8 +2,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.53)
-AC_PACKAGE_VERSION(1.1.2)
-AC_INIT(fast_xml, 1.1.2, [], [])
+AC_PACKAGE_VERSION(1.1.19)
+AC_INIT(fast_xml, 1.1.19, [], [])
 
 # Checks for programs.
 AC_PROG_CC
