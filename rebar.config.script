@@ -109,7 +109,7 @@ Rules = [
 	 {[port_env, "LDFLAGS"], true,
 	  AppendStr(CfgLDFlags), "$LDFLAGS"},
 	 {[post_hooks], CfgWithGCov == "true",
-	  AppendList([{eunit, "gcov -o c_src fast_tls p1_sha"},
+	  AppendList([{eunit, "gcov -o c_src fxml fxml_stream"},
 		      {eunit, "mv *.gcov .eunit/"}]), []},
 	 {[port_env, "LDFLAGS"], CfgWithGCov == "true",
 	  AppendStr("--coverage"), ""},
