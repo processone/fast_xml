@@ -30,80 +30,114 @@ Cfg = case file:consult("vars.config") of
 {ldflags, CfgLDFlags} = lists:keyfind(ldflags, 1, Cfg),
 {with_gcov, CfgWithGCov} = lists:keyfind(with_gcov, 1, Cfg),
 
+IsRebar3 = case application:get_key(rebar, vsn) of
+	       {ok, VSN} ->
+		   [VSN1 | _] = string:tokens(VSN, "-"),
+		   [Maj, Min, Patch] = string:tokens(VSN1, "."),
+		   (list_to_integer(Maj) >= 3);
+	       undefined ->
+		   lists:keymember(mix, 1, application:loaded_applications())
+	   end,
+
+JobId = case os:getenv("TRAVIS_JOB_ID") of false -> ""; V -> V end,
 
 ModCfg0 = fun(F, Cfg, [Key|Tail], Op, Default) ->
-                 {OldVal,PartCfg} = case lists:keytake(Key, 1, Cfg) of
-                                        {value, {_, V1}, V2} -> {V1, V2};
-                                        false -> {if Tail == [] -> Default; true -> [] end, Cfg}
-                                    end,
-                 case Tail of
-                     [] ->
-                         [{Key, Op(OldVal)} | PartCfg];
-                     _ ->
-                         [{Key, F(F, OldVal, Tail, Op, Default)} | PartCfg]
-                 end
-         end,
-ModCfg = fun(Cfg, Keys, Op, Default) -> ModCfg0(ModCfg0, Cfg, Keys, Op, Default) end.
-ModCfgS = fun(Cfg, Keys, Val) -> ModCfg0(ModCfg0, Cfg, Keys, fun(_V) -> Val end, "") end.
+		  {OldVal,PartCfg} = case lists:keytake(Key, 1, Cfg) of
+					 {value, {_, V1}, V2} -> {V1, V2};
+					 false -> {if Tail == [] -> Default; true -> [] end, Cfg}
+				     end,
+		  case Tail of
+		      [] ->
+			  [{Key, Op(OldVal)} | PartCfg];
+		      _ ->
+			  [{Key, F(F, OldVal, Tail, Op, Default)} | PartCfg]
+		  end
+	  end,
+	ModCfg = fun(Cfg, Keys, Op, Default) -> ModCfg0(ModCfg0, Cfg, Keys, Op,
+		  Default) end,
 
-Cfg0 = ModCfg(CONFIG, [port_env, "CFLAGS"], fun(V) -> V ++ " " ++ CfgCFlags end, "$CFLAGS"),
-Cfg00 = ModCfg(Cfg0, [port_env, "LDFLAGS"], fun(V) -> V ++ " " ++ CfgLDFlags end, "$LDFLAGS"),
-Cfg1 = case CfgWithGCov of
-           "true" ->
-               V1 = ModCfg(Cfg00, [post_hooks], fun(V) -> V ++ [{eunit, "gcov -o c_src fxml fxml_stream"},
-                                                                {eunit, "mv *.gcov .eunit/"}] end, []),
-               V2 = ModCfg(V1, [port_env, "LDFLAGS"], fun(V) -> V ++ " --coverage" end, ""),
-               ModCfg(V2, [port_env, "CFLAGS"], fun(V) -> V ++ " --coverage" end, "");
-           _ ->
-               Cfg00
-       end,
+	ModCfgS = fun(Cfg, Keys, Val) -> ModCfg0(ModCfg0, Cfg, Keys, fun(_V) ->
+		  Val end, "") end,
 
-%% Rebar3 support for hex.pm support:
-%% - Transform dependencies specification to use hex.pm packages:
-%%   deps of the form: {Name, _Vsn, {git, _URL, {tag, Version}}}
-%%     are expected to refer to package and are rewritten for rebar3 as:
-%%   {Name, Version}
-%% - Add rebar3_hex plugin
-IsRebar3 = case application:get_key(rebar, vsn) of
-               {ok, VSN} ->
-                   [VSN1 | _] = string:tokens(VSN, "-"),
-                   [Maj, Min, Patch] = string:tokens(VSN1, "."),
-                   (list_to_integer(Maj) >= 3);
-               undefined ->
-                   lists:keymember(mix, 1, application:loaded_applications())
-           end,
-Cfg2 = case IsRebar3 of
-           true ->
-               DepsFun = fun(DepsList) -> lists:map(fun({DepName,_, {git,_, {tag,Version}}}) ->
-                                                            {DepName, Version};
-                                                       (Dep) ->
-                                                            Dep
-                                                    end, DepsList)
-                         end,
-               RB1 = ModCfg(Cfg1, [deps], DepsFun, []),
-               RB2 = ModCfg(RB1, [plugins], fun(V) -> V ++ [rebar3_hex, pc] end, []),
-               ModCfg(RB2, [provider_hooks], fun(V) -> V ++ [{pre,
-							      [
-							       {compile, {pc, compile}},
-							       {clean, {pc, clean}}
-							      ]
-							     }] end, []);
-           false ->
-               Cfg1
-       end,
 
-%% When running Travis test, upload test coverage result to coveralls:
-Config = case os:getenv("TRAVIS") of
-             "true" ->
-                 JobId = os:getenv("TRAVIS_JOB_ID"),
-                 Cfg3 = ModCfg(Cfg2, [deps], fun(V) -> [{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}|V] end, []),
-                 ModCfg(Cfg3, [post_hooks], fun(V) -> V ++ [{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\")]).' > getcover.erl"},
-                                                                   {eunit, "escript ./getcover.erl"}] end, []);
-             _ ->
-                 Cfg2
-         end,
+FilterConfig = fun(F, Cfg, [{Path, true, ModFun, Default} | Tail]) ->
+		       F(F, ModCfg0(ModCfg0, Cfg, Path, ModFun, Default), Tail);
+		  (F, Cfg, [_ | Tail]) ->
+		       F(F, Cfg, Tail);
+		  (F, Cfg, []) ->
+		       Cfg
+	       end,
 
-%%io:format("xml configuration:~n  ~p~n", [Config]),
+AppendStr = fun(Append) ->
+		    fun("") ->
+			    Append;
+		       (Val) ->
+			    Val ++ " " ++ Append
+		    end
+	    end,
+AppendList = fun(Append) ->
+		     fun(Val) ->
+			     Val ++ Append
+		     end
+	     end,
+
+Rebar3DepsFilter = fun(DepsList) ->
+			   lists:map(fun({DepName,_, {git,_, {tag,Version}}}) ->
+					     {DepName, Version};
+					(Dep) ->
+					     Dep
+				     end, DepsList)
+		   end,
+
+GlobalDepsFilter = fun(Deps) ->
+			   DepNames = lists:map(fun({DepName, _, _}) -> DepName;
+						   ({DepName, _}) -> DepName
+						   end, Deps),
+			   lists:filtermap(fun(Dep) ->
+						 case code:lib_dir(Dep) of
+						     {error, _} ->
+							 {true,"Unable to locate dep '"++atom_to_list(Dep)++"' in system deps."};
+						     _ ->
+							 false
+						 end
+					 end, DepNames)
+		   end,
+
+Rules = [
+	 {[port_env, "CFLAGS"], true,
+	  AppendStr(CfgCFlags), "$CFLAGS"},
+	 {[port_env, "LDFLAGS"], true,
+	  AppendStr(CfgLDFlags), "$LDFLAGS"},
+	 {[post_hooks], CfgWithGCov == "true",
+	  AppendList([{eunit, "gcov -o c_src fast_tls p1_sha"},
+		      {eunit, "mv *.gcov .eunit/"}]), []},
+	 {[port_env, "LDFLAGS"], CfgWithGCov == "true",
+	  AppendStr("--coverage"), ""},
+	 {[port_env, "CFLAGS"], CfgWithGCov == "true",
+	  AppendStr("--coverage"), ""},
+	 {[deps], IsRebar3,
+	  Rebar3DepsFilter, []},
+	 {[plugins], IsRebar3,
+	  AppendList([rebar3_hex, pc]), []},
+	 {[provider_hooks], IsRebar3,
+	  AppendList([{pre, [
+			     {compile, {pc, compile}},
+			     {clean, {pc, clean}}
+			    ]}]), []},
+	 {[deps], os:getenv("TRAVIS") == "true",
+	  AppendList([{coveralls, ".*", {git, "https://github.com/markusn/coveralls-erl.git", "master"}}]), []},
+	 {[post_hooks], os:getenv("TRAVIS") == "true",
+	  AppendList([{eunit, "echo '\n%%! -pa .eunit/ deps/coveralls/ebin\nmain(_)->{ok,F}=file:open(\"erlang.json\",[write]),io:fwrite(F,\"~s\",[coveralls:convert_file(\".eunit/cover.coverdata\", \""++JobId++"\", \"travis-ci\",\"\")]).' > getcover.erl"},
+		      {eunit, "escript ./getcover.erl"}]), []},
+	 {[deps], os:getenv("USE_GLOBAL_DEPS") /= false,
+	  GlobalDepsFilter, []}
+	],
+
+
+Config = FilterConfig(FilterConfig, CONFIG, Rules),
+
+%io:format("~p~n~n~p~n~n~p~n", [Rules, CONFIG, Config]),
+
 Config.
 
 %% Local Variables:
