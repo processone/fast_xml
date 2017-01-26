@@ -20,7 +20,7 @@
 %%%
 %%%----------------------------------------------------------------------
 
-Cfg = case file:consult("vars.config") of
+Cfg = case file:consult(filename:join([filename:dirname(SCRIPT),"vars.config"])) of
           {ok, Terms} ->
               Terms;
           _Err ->
@@ -136,7 +136,7 @@ Rules = [
 
 Config = FilterConfig(FilterConfig, CONFIG, Rules),
 
-%io:format("~p~n~n~p~n~n~p~n", [Rules, CONFIG, Config]),
+%io:format("Rules:~n~p~n~nCONFIG:~n~p~n~nConfig:~n~p~n", [Rules, CONFIG, Config]),
 
 Config.
 
