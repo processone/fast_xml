@@ -317,7 +317,11 @@ get_predefined_records(AttrForms) ->
       fun(F, Acc) ->
 	      case erl_syntax_lib:analyze_attribute(F) of
 		  {record, {RecName, RecAttrs}} ->
-		      dict:store(RecName, RecAttrs, Acc);
+		      RecAttrs1 = lists:map(
+				    fun({Attr, {Default, _}}) -> {Attr, Default};
+				       ({Attr, Default}) -> {Attr, Default}
+				    end, RecAttrs),
+		      dict:store(RecName, RecAttrs1, Acc);
 		  _ ->
 		      Acc
 	      end
@@ -762,7 +766,7 @@ subst_labels(Term, PredefRecords) ->
 		RecName = erl_syntax:atom_value(H),
 		RecFields = dict:fetch(RecName, PredefRecords),
 		Vars = lists:map(
-			 fun({T, {_, {Default, _}}}) ->
+			 fun({T, {_, Default}}) ->
 				 AbsDefault = if Default == none ->
 						      ?AST(undefined);
 						 true ->
@@ -2451,7 +2455,7 @@ t_from_form(Spec) ->
     erl_types:t_from_form(Spec).
 -else.
 t_from_form(Spec) ->
-    erl_types:t_from_form(Spec, sets:new(), mod, dict:new()).
+    erl_types:t_from_form(Spec, sets:new(), {spec, foo}, dict:new()).
 -endif.
 
 t_remote(Mod, Type) ->
