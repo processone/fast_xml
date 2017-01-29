@@ -693,7 +693,7 @@ make_printer(TaggedSpecs, PredefRecords) ->
                       [Tag|_] = dict:fetch(H, RecNames),
 		      Fields = case dict:find(H, PredefRecords) of
 				   {ok, Fs} ->
-				       Fs;
+				       [FName || {FName, _} <- Fs];
 				   error ->
 				       [label_to_record_field(F) || F <- T]
 			       end,
