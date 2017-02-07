@@ -38,6 +38,7 @@
 		enc}).
 
 -record(elem, {name,
+	       module,
                xmlns = <<"">>,
                cdata = #cdata{},
                result,
