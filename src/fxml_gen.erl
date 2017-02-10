@@ -62,18 +62,54 @@ compile(Path, Opts) ->
     end.
 
 do_compile(Path, Opts) ->
-    case consult(Path) of
-        {ok, Terms, Forms} ->
-            Elems = lists:flatmap(
-                      fun({Tag, Elem}) when is_atom(Tag),
-                                            is_record(Elem, elem) ->
-                              [{Tag, Elem}];
-                         (_) ->
-                              []
-                      end, Terms),
-            compile(Elems, Forms, Path, Opts);
+    case get_files_from_predefined_dir() of
+	{ok, Files} ->
+	    case lists:foldr(
+		   fun(_, {error, _} = Err) ->
+			   Err;
+		      (File, {AccTs, AccFs}) ->
+			   case consult(File) of
+			       {ok, Ts, Fs} ->
+				   {Ts ++ AccTs, Fs ++ AccFs};
+			       Err ->
+				   Err
+			   end
+		   end, {[], []}, [Path|Files]) of
+		{error, Why} ->
+		    {error, Why};
+		{Terms, Forms} ->
+		    Elems = lists:flatmap(
+			      fun({Tag, Elem}) when is_atom(Tag),
+						    is_record(Elem, elem) ->
+				      [{Tag, Elem}];
+				 (_) ->
+				      []
+			      end, Terms),
+		    compile(Elems, Forms, Path, Opts)
+	    end;
         Err ->
             Err
+    end.
+
+get_files_from_predefined_dir() ->
+    case os:getenv("FXML_GEN_DIR") of
+	false ->
+	    {ok, []};
+	Dir ->
+	    case file:list_dir(Dir) of
+		{ok, Files} ->
+		    {ok, lists:flatmap(
+			   fun(File) ->
+				   case filename:extension(File) of
+				       ".spec" ->
+					   [filename:join(Dir, File)];
+				       _ ->
+					   []
+				   end
+			   end, Files)};
+		{error, _} = Err ->
+		    Err
+	    end
     end.
 
 %%====================================================================
