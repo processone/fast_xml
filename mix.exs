@@ -18,10 +18,10 @@ defmodule FastXML.Mixfile do
   def project do
     [ app: :fast_xml,
       description: "Fast Expat-based Erlang / Elixir XML parsing library",
-      version: "1.1.12",
-      elixir: "~> 1.2",
-      compilers: [:fastXML | Mix.compilers],
-      aliases: aliases,
+      version: "1.1.13",
+      elixir: "~> 1.3",
+      compilers: [:elixir_make | Mix.compilers],
+      make_makefile: "Makefile",
       deps: deps,
       package: package
     ]
@@ -44,45 +44,9 @@ defmodule FastXML.Mixfile do
 
   def deps do
     [{:p1_utils, "~> 1.0"},
+     {:elixir_make, "~> 0.4", runtime: false},
      {:earmark, "~> 0.1", only: :dev},
      {:ex_doc, "~> 0.11", only: :dev},
      {:eqc_ex, "~> 1.2", only: :test}]
-  end
-
-  defp aliases do
-    # Execute the usual mix clean and our Makefile clean task
-    [clean: ["clean", "clean.fastXML"]]
-  end
-end
-
-# Define
-defmodule Mix.Tasks.Compile.FastXML do
-  @shortdoc "Compiles helper in c_src"
-
-  # TODO refactor
-  def run(_) do
-    if match? {:win32, _}, :os.type do
-      {result, _error_code} = System.cmd("nmake", ["/F", "Makefile.mix", "priv\\lib\\fxml_stream.dll"], stderr_to_stdout: true)
-      Mix.shell.info result
-      {result, _error_code} = System.cmd("nmake", ["/F", "Makefile.mix", "priv\\lib\\fxml.dll"], stderr_to_stdout: true)
-      Mix.shell.info result
-    else
-      {result, _error_code} = System.cmd("make", ["-f", "Makefile.mix", "priv/lib/fxml_stream.so"], stderr_to_stdout: true)
-      Mix.shell.info result
-      {result, _error_code} = System.cmd("make", ["-f", "Makefile.mix", "priv/lib/fxml.so"], stderr_to_stdout: true)
-      Mix.shell.info result
-    end
-    Mix.Project.build_structure
-  end
-end
-
-defmodule Mix.Tasks.Clean.FastXML do
-  @shortdoc "Cleans helper in c_src"
-
-  def run(_) do
-    {result, _error_code} = System.cmd("make", ["-f", "Makefile.mix", "clean"], stderr_to_stdout: true)
-    Mix.shell.info result
-
-    :ok
   end
 end
