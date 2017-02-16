@@ -103,8 +103,8 @@ close(_State) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec parse_element(binary()) -> xmlel() |
-                                 {error, parse_error} |
-                                 {error, binary()}.
+                                 {error, atom()} |
+                                 {error, {integer(), binary()}}.
 
 parse_element(_Str) ->
     erlang:nif_error(nif_not_loaded).
