@@ -215,7 +215,15 @@ choose_top_xmlns(XMLNS, _, _) ->
     XMLNS.
 
 register_module(Mod, ResolverMod) ->
-    MD5Sum = Mod:module_info(md5),
+    MD5Sum = try Mod:module_info(md5) of
+		 Val -> Val
+	     catch error:badarg ->
+		     %% 'md5' attribute is relatively new,
+		     %% calculate md5sum using beam_lib for
+		     %% older OTP
+		     {ok, {Mod, Val}} = beam_lib:md5(code:which(Mod)),
+		     Val
+	     end,
     case orddict:find(Mod, ResolverMod:modules()) of
 	{ok, MD5Sum} ->
 	    ok;
