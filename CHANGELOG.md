@@ -1,3 +1,8 @@
+# Version 1.1.22
+
+* Fix md5 sum calculation of modules for OTP17 (Evgeniy Khramtsov)
+* Fix type spec for fxml_stream:parse_element/1 (Evgeniy Khramtsov)
+
 # Version 1.1.21
 
 * Add code for building on FreeBSD (Dave Cottlehuber)
