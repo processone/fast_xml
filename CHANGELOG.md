@@ -1,3 +1,7 @@
+# Version 1.1.23
+
+* depends on p1_utils-1.0.9
+
 # Version 1.1.22
 
 * Fix md5 sum calculation of modules for OTP17 (Evgeniy Khramtsov)
