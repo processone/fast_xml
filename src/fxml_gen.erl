@@ -620,7 +620,7 @@ make_typespecs(_ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
     case proplists:get_value(add_type_specs, Opts) of
 	TypeName when is_atom(TypeName), TypeName /= undefined ->
 	    case [[atom_to_string(R), "()"]
-		  || {record, R} <- dict:fetch_keys(RecDict)] of
+		  || {record, R} <- dict_keys(RecDict)] of
 		[] ->
 		    [];
 		Records ->
@@ -2162,7 +2162,7 @@ get_types(TaggedElems, FunSpecs, Opts) ->
                           Type = term_to_t(Result, LabelTypes),
                           dict:store(RefName, Type, Dict)
                   end, dict:new(), SortedTags),
-    RecDict = dict:from_list(
+    RecDict = dict_from_list(
                 lists:flatmap(
                   fun({Tag, _T}) ->
                           RefElem = get_elem_by_ref(Tag, TaggedElems),
@@ -2739,8 +2739,20 @@ t_from_form(Spec) ->
     T.
 
 t_remote(Mod, Type) ->
-    D = dict:from_list([{{opaque, Type, []},
+    D = dict_from_list([{{opaque, Type, []},
 			 {{Mod, 1, 2, []}, type}}]),
     [T] = erl_types:t_opaque_from_records(D),
     T.
+-endif.
+
+-ifdef(USE_MAPS).
+dict_from_list(L) ->
+    maps:from_list(L).
+dict_keys(D) ->
+    maps:keys(D).
+-else.
+dict_from_list(L) ->
+    dict:from_list(L).
+dict_keys(D) ->
+    dict:fetch_keys(D).
 -endif.
