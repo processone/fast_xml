@@ -1,3 +1,7 @@
+# Version 1.1.24
+
+* Make XML generator work on R19.3+
+
 # Version 1.1.23
 
 * depends on p1_utils-1.0.9
