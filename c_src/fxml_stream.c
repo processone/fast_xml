@@ -939,7 +939,10 @@ static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
   state->env = env;
 
   if (state->size >= state->max_size) {
+    size_t size = state->size;
     send_error(state, str2bin(state->send_env, "XML stanza is too big"));
+    /* Don't let send_event() to set size to zero */
+    state->size = size;
   } else {
     int res = XML_Parse(state->parser, (char *)bin.data, bin.size, 0);
     if (!res)
