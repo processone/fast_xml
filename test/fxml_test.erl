@@ -388,6 +388,29 @@ too_big_test() ->
 		 collect_events(CallbackPid)),
     close(Stream4).
 
+too_big_with_data_after_test() ->
+    parser_loop(30, [],
+		[{
+		   <<"<start>">>,
+		   [{xmlstreamstart, <<"start">>, []}]
+		 },
+		 {
+		   <<"<foo><a t='1' ">>,
+		   []
+		 },
+		 {
+		   <<"<1234567890123456790123456789012345678901234567890/>">>,
+		   [{xmlstreamerror, <<"XML stanza is too big">>}]
+		 },
+		 {
+		   <<"z='1'/>">>,
+		   [{xmlstreamerror, <<"XML stanza is too big">>}]
+		 },
+		 {
+		   <<"</foo></start>">>,
+		   [{xmlstreamerror, <<"XML stanza is too big">>}]
+		 }]).
+
 close_close_test() ->
     Stream = new(),
     close(Stream),
