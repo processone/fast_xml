@@ -830,7 +830,6 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
 		none,
 		[?AST(Mod = get_mod(El)),
 		 ?AST(Mod:do_encode(El, TopXMLNS))]),
-    PPCase = ?AST(io_lib_pretty:print(Term, fun pp/2)),
     [make_function(encode, [?AST(El)], [?AST(encode(El, <<>>))]),
      erl_syntax:function(?AST(encode), [Clause1, Clause2]),
      make_function(get_name, [?AST(El)], GetNameCase),
@@ -843,8 +842,7 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
 		    ?AST(Mod:get_els(Term))]),
      make_function(set_els, [?AST(Term), ?AST(Els)],
 		   [?AST(Mod = get_mod(Term)),
-		    ?AST(Mod:set_els(Term, Els))]),
-     make_function(pp, [?AST(Term)], [PPCase])].
+		    ?AST(Mod:set_els(Term, Els))])].
 
 make_encoders(TaggedSpecs, ModName) ->
     {RecNames, ResNames} =
@@ -954,18 +952,27 @@ make_encoders(TaggedSpecs, ModName) ->
     end.
 
 make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
-    PassClause1 = erl_syntax:clause(
-		    [?AST(Name), ?AST(Arity)],
-		    none,
-		    [erl_syntax:case_expr(
-		       ?AST('?a(ParentMod)':get_mod(
-			      erlang:make_tuple(Arity+1, undefined, [{1, Name}]))),
-		       [erl_syntax:clause(
-			  [?AST(undefined)], none, [?AST(no)]),
-			erl_syntax:clause(
-			  [?AST(Mod)],
-			  none,
-			  [?AST(Mod:pp(Name, Arity))])])]),
+    PassClause1 =
+	if ModName == ParentMod ->
+		[erl_syntax:clause(
+		   [?AST(xmlel), ?AST(3)],
+		   none,
+		   [?AST([name, attrs, children])]),
+		 erl_syntax:clause(
+		   [?AST(Name), ?AST(Arity)],
+		   none,
+		   [erl_syntax:case_expr(
+		      ?AST(get_mod(
+			     erlang:make_tuple(Arity+1, undefined, [{1, Name}]))),
+		      [erl_syntax:clause(
+			 [?AST(undefined)], none, [?AST(no)]),
+		       erl_syntax:clause(
+			 [?AST(Mod)],
+			 none,
+			 [?AST(Mod:pp(Name, Arity))])])])];
+	   true ->
+		[erl_syntax:clause([?AST(_), ?AST(_)], none, [?AST(no)])]
+	end,
     %% Exclude tags with duplicated results
     RecNames = lists:foldl(
                  fun({Tag, #elem{result = Result, module = Mod}}, Acc)
@@ -1006,11 +1013,7 @@ make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
                           {Acc1, Acc2}
                   end
           end, {[], []}, TaggedSpecs),
-    XmlElClause = erl_syntax:clause(
-		    [?AST(xmlel), ?AST(3)],
-		    none,
-		    [?AST([name, attrs, children])]),
-    [erl_syntax:function(?AST(pp), Clauses1 ++ [XmlElClause, PassClause1]),
+    [erl_syntax:function(?AST(pp), Clauses1 ++ PassClause1),
      make_function(records, [],
 		   [erl_syntax:list(
 		      lists:map(
