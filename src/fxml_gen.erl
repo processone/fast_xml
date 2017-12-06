@@ -421,11 +421,12 @@ write_module(ModName, ModName, AST, FunDeps, ErlDirName,
     Decoders = make_decoders(TaggedElems, ModName, ModName),
     Encoders = make_encoders(TaggedElems, ModName),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ModName),
+    GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
     Resolver = make_resolver(TaggedElems, ModName),
     AuxFuns = make_aux_funs(),
     LocalFunForms = make_local_funs(FunDeps, TaggedElems, ModName),
     NewAST = TopDecoders ++ TopEncoders ++ Decoders ++ Encoders ++
-	Registrar ++ AuxFuns ++ LocalFunForms ++ Printer ++ Resolver ++ AST,
+	GettersSetters ++ Registrar ++ AuxFuns ++ LocalFunForms ++ Printer ++ Resolver ++ AST,
     Compile = erl_syntax:attribute(?AST(compile), [?AST(export_all)]),
     Hdr = header(SpecFile),
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile|NewAST]),
@@ -443,9 +444,10 @@ write_module(ParentMod, ModName, AST, FunDeps, ErlDirName,
     Decoders = make_decoders(TaggedElems, ParentMod, ModName),
     Encoders = make_encoders(TaggedElems, ModName),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ParentMod),
+    GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
     Compile = erl_syntax:attribute(?AST(compile), [?AST(export_all)]),
     LocalFunForms = make_local_funs(FunDeps, TaggedElems, ModName),
-    NewAST = Decoders ++ Encoders ++ Printer ++ LocalFunForms ++ AST,
+    NewAST = Decoders ++ Encoders ++ GettersSetters ++ Printer ++ LocalFunForms ++ AST,
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile|NewAST]),
     file:write_file(
       filename:join([ErlDirName, ModNameErl]),
@@ -836,6 +838,12 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
      make_function(is_known_tag,
 		   [?AST({xmlel, Name, Attrs, _}), ?AST(TopXMLNS)],
 		   KnownTagCase),
+     make_function(get_els, [?AST(Term)],
+		   [?AST(Mod = get_mod(Term)),
+		    ?AST(Mod:get_els(Term))]),
+     make_function(set_els, [?AST(Term), ?AST(Els)],
+		   [?AST(Mod = get_mod(Term)),
+		    ?AST(Mod:set_els(Term, Els))]),
      make_function(pp, [?AST(Term)], [PPCase])].
 
 make_encoders(TaggedSpecs, ModName) ->
@@ -1009,6 +1017,62 @@ make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
 			fun({RecName, RecSize}) ->
 				?AST({'?a(RecName)', '?a(RecSize)'})
 			end, Records))])].
+
+make_getters_setters(TaggedSpecs, PredefRecords, ModName) ->
+    RecNames = lists:foldl(
+                 fun({Tag, #elem{result = Result, module = Mod}}, Acc)
+		       when Mod == ModName ->
+                         try
+                             [H|_]= tuple_to_list(Result),
+                             true = is_atom(H),
+                             false = is_label(H),
+                             dict:append(H, Tag, Acc)
+                         catch _:_ ->
+                                 Acc
+                         end;
+		    (_, Acc) ->
+			 Acc
+                 end, dict:new(), TaggedSpecs),
+    {Getters, Setters} =
+        lists:foldl(
+          fun({Tag, #elem{result = Result}}, {Acc1, Acc2}) ->
+                  try
+                      [H|T]= tuple_to_list(Result),
+                      true = is_atom(H),
+                      false = is_label(H),
+                      [Tag|_] = dict:fetch(H, RecNames),
+		      Fields = case dict:find(H, PredefRecords) of
+				   {ok, Fs} ->
+				       [FName || {FName, _} <- Fs];
+				   error ->
+				       [label_to_record_field(F) || F <- T]
+			       end,
+		      case lists:member(sub_els, Fields) of
+			  false ->
+			      {Acc1, Acc2};
+			  true ->
+			      {[erl_syntax:clause(
+				  [record_fields_to_vars(H, Fields)],
+				  none,
+				  [?AST(_sub_els)])|Acc1],
+			       [erl_syntax:clause(
+				  [record_fields_to_vars(H, Fields, [{sub_els, ?AST(_)}]),
+				   ?AST(_sub_els)],
+				  none,
+				  [record_fields_to_vars(
+				     H, Fields, [{sub_els, ?AST(_sub_els)}])])|Acc2]}
+		      end
+		  catch _:_ ->
+			 {Acc1, Acc2}
+                  end
+          end, {[], []}, TaggedSpecs),
+    case {Getters, Setters} of
+	{[], []} ->
+	    [];
+	_ ->
+	    [erl_syntax:function(?AST(get_els), Getters),
+	     erl_syntax:function(?AST(set_els), Setters)]
+    end.
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem,
@@ -1980,6 +2044,22 @@ label_to_record_field(Label) ->
         [$$|T] ->
             list_to_atom(T)
     end.
+
+record_fields_to_vars(Name, Fields) ->
+    record_fields_to_vars(Name, Fields, []).
+
+record_fields_to_vars(Name, Fields, Replace) ->
+    FList = lists:map(
+	      fun(Field) ->
+		      case lists:keyfind(Field, 1, Replace) of
+			  {_, AbstractVal} ->
+			      AbstractVal;
+			  false ->
+			      erl_syntax:variable(
+				[$_|atom_to_list(Field)])
+		      end
+	      end, Fields),
+    erl_syntax:tuple([erl_syntax:atom(Name)|FList]).
 
 prepare_label(Label, Name) when is_atom(Name) ->
     prepare_label(Label, erlang:atom_to_binary(Name, utf8));
