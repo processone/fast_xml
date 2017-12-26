@@ -1,3 +1,10 @@
+# Version 1.1.26
+
+* Simplify pretty printer generation
+* Generate get_els/1 and set_els/2
+* The pretty printer should traverse elements recursively
+* Extra test for too big input
+
 # Version 1.1.25
 
 * Invalidate sotred data when generating stanza-too-big-error
