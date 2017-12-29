@@ -1,3 +1,8 @@
+# Version 1.1.27
+
+* Freeze dependencies in mix.lock file to be more friendly with hex.pm
+* Fix ambiguous Elixir syntax in mix.exs
+
 # Version 1.1.26
 
 * Simplify pretty printer generation
