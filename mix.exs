@@ -35,7 +35,7 @@ defmodule FastXML.Mixfile do
 
   defp package do
     [# These are the default files included in the package
-     files: ["src", "lib", "c_src/*.c", "mix.exs", "rebar.config", "rebar.config.script", "Makefile.mix", "priv", "include", "README.md", "LICENSE.txt"],
+     files: ["src", "lib", "c_src/*.c", "mix.exs", "rebar.config", "rebar.config.script", "Makefile", "Makefile.mix", "priv", "include", "README.md", "LICENSE.txt"],
      maintainers: ["ProcessOne"],
      licenses: ["Apache 2.0"],
      links: %{"GitHub" => "https://github.com/processone/fast_xml",
