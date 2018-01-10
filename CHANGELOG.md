@@ -1,5 +1,6 @@
 # Version 1.1.27
 
+* Include Makefile in package generated for hex
 * Freeze dependencies in mix.lock file to be more friendly with hex.pm
 * Fix ambiguous Elixir syntax in mix.exs
 
