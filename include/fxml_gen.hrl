@@ -41,6 +41,7 @@
 	       module,
                xmlns = <<"">>,
                cdata = #cdata{},
+	       ignore_els = false,
                result,
                attrs = [],
                refs = []}).

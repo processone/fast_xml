@@ -1172,8 +1172,6 @@ get_elem_by_ref(RefName, TaggedElems) ->
 
 get_spec_by_label('$_els', _Elem) ->
     sub_els;
-get_spec_by_label('$_xmls', _Elem) ->
-    xml_els;
 get_spec_by_label('$_', _Elem) ->
     '_';
 get_spec_by_label(Label, Elem) ->
@@ -1212,7 +1210,8 @@ group_refs(Refs) ->
         end, dict:new(), Refs)).
 
 make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
-                        cdata = CData, attrs = Attrs, xmlns = XMLNS},
+                        cdata = CData, attrs = Attrs, xmlns = XMLNS,
+			ignore_els = IgnoreEls},
                   Tag, AllElems, Types, ModName, PredefRecords, Opts) ->
     FunName = make_dec_fun_name([Tag]),
     ResultWithVars = subst_labels(Result, PredefRecords),
@@ -1229,12 +1228,6 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
     SubElVars = case have_label(Result, '$_els') of
                     true ->
                         [label_to_var('$_els')];
-                    false ->
-                        []
-                end,
-    XmlElVars = case have_label(Result, '$_xmls') of
-                    true ->
-                        [label_to_var('$_xmls')];
                     false ->
                         []
                 end,
@@ -1258,12 +1251,12 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
                 []
         end,
     ElCDataMatch =
-        case CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars of
+        case CDataVars ++ ElemVars ++ SubElVars of
             [] ->
                 [];
             _ ->
                 [erl_syntax:match_expr(
-                   tuple_or_single_var(CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars),
+                   tuple_or_single_var(CDataVars ++ ElemVars ++ SubElVars),
                    make_function_call(
                      FunName ++ "_els",
                      [?AST(__TopXMLNS),
@@ -1280,7 +1273,7 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
                                 [];
                            (_) ->
                                 [?AST([])]
-                        end, [CData|group_refs(Refs)] ++ SubElVars ++ XmlElVars)]))]
+                        end, [CData|group_refs(Refs)] ++ SubElVars)]))]
         end,
     [make_function(
        FunName,
@@ -1289,8 +1282,8 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
 	?AST({xmlel, '?a(Name)', _attrs, _els})],
        ElCDataMatch ++ AttrMatch ++ [ResultWithVars])]
         ++ make_els_dec_fun(Mod, FunName ++ "_els", CData, HaveCData, SubElVars,
-                            XmlElVars, Refs, Tag, XMLNS, AllElems,
-                            Result, Types, ModName, Opts)
+                            Refs, Tag, XMLNS, AllElems,
+                            Result, Types, ModName, IgnoreEls, Opts)
         ++ make_attrs_dec_fun(FunName ++ "_attrs", Attrs, Tag).
 
 make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
@@ -1298,12 +1291,6 @@ make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
     SubElVars = case have_label(Result, '$_els') of
                     true ->
                         [label_to_var('$_els')];
-                    false ->
-                        []
-                end,
-    XmlElVars = case have_label(Result, '$_xmls') of
-                    true ->
-                        [label_to_var('$_xmls')];
                     false ->
                         []
                 end,
@@ -1366,7 +1353,7 @@ make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
                 [?AST(__TopXMLNS),
 		 ?AST(__Opts),
 		 ?AST([{xmlel, '?a(RefElem#elem.name)', _attrs, _} = _el | _els])|
-                 CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
+                 CDataVars ++ ElemVars ++ SubElVars],
                 none,
 		[erl_syntax:case_expr(
 		   ?AST('?a(ParentMod)':get_attr(<<"xmlns">>, _attrs, __TopXMLNS)),
@@ -1380,7 +1367,7 @@ make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
 				  [?AST(__TopXMLNS),
 				   ?AST(__Opts),
 				   ?AST(_els)|CDataVars ++ NewElemVars(abstract(NS))
-				   ++ SubElVars ++ XmlElVars])])
+				   ++ SubElVars])])
 		     end, XMLNSs)
 		   ++
 		       [erl_syntax:clause(
@@ -1390,14 +1377,20 @@ make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
 			     [?AST(__TopXMLNS),
 			      ?AST(__Opts),
 			      ?AST(_els)|CDataVars ++ ElemVars
-			      ++ SubElVars ++ XmlElVars])])])])
+			      ++ case SubElVars of
+				     [] -> [];
+				     _ -> [erl_syntax:list(
+					     [?AST(_el)],
+					     label_to_var('$_els'))]
+				 end])])])])
       end, Refs).
 
-make_els_dec_fun(_, _FunName, _CData, false, [], [], [], _Tag,
-                 _TopXMLNS, _AllElems, _Result, _Types, _ModName, _Opts) ->
+make_els_dec_fun(_, _FunName, _CData, false, [], [], _Tag,
+                 _TopXMLNS, _AllElems, _Result, _Types, _ModName,
+		 _IgnoreEls, _Opts) ->
     [];
-make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag,
-                 TopXMLNS, AllElems, Result, Types, ModName, Opts) ->
+make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, Refs, Tag,
+                 TopXMLNS, AllElems, Result, Types, ModName, IgnoreEls, Opts) ->
     CDataVars = if HaveCData ->
                         [label_to_var(CData#cdata.label)];
                    true ->
@@ -1425,14 +1418,14 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
 			      erl_syntax:list(
                                 [?AST({xmlcdata, _data})],
                                 ?AST(_els))
-                              |CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
+                              |CDataVars ++ ElemVars ++ SubElVars],
                              none,
                              [make_function_call(
                                 FunName,
                                 [?AST(__TopXMLNS),
 				 ?AST(__Opts),
 				 ?AST(_els)|
-                                 ResultCData ++ ElemVars ++ SubElVars ++ XmlElVars])])];
+                                 ResultCData ++ ElemVars ++ SubElVars])])];
                      true ->
                           []
                   end,
@@ -1480,14 +1473,6 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
                       false ->
                           []
                   end,
-    XmlElResult = case have_label(Result, '$_xmls') of
-                      true ->
-                          [make_function_call(
-                             {lists, reverse},
-                             [label_to_var('$_xmls')])];
-                      false ->
-                          []
-                  end,
     NilClause = erl_syntax:clause(
                   [?AST(__TopXMLNS),
 		   ?AST(__Opts),
@@ -1496,20 +1481,29 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
                        lists:map(
                          fun({L, _}) ->
                                  label_to_var(L)
-                         end, group_refs(Refs)) ++ SubElVars ++ XmlElVars],
+                         end, group_refs(Refs)) ++ SubElVars],
                   none,
                   [tuple_or_single_var(
-                     CDataCall ++ ResultElems ++ SubElResult ++ XmlElResult)]),
+                     CDataCall ++ ResultElems ++ SubElResult)]),
     SubElPattern = [?AST(__TopXMLNS),
 		    ?AST(__Opts),
 		    erl_syntax:list(
                       [?AST({xmlel, _name, _attrs, _} = _el)],
                       ?AST(_els))
-                    |CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
+                    |CDataVars ++ ElemVars ++ SubElVars],
     SubElClause =
-        case {have_label(Result, '$_els'),
-              have_label(Result, '$_xmls')} of
-            {true, false} ->
+        case have_label(Result, '$_els') of
+	    true when IgnoreEls ->
+		SubElBody = make_function_call(
+			      FunName,
+			      [?AST(__TopXMLNS),
+			       ?AST(__Opts),
+			       ?AST(_els)|CDataVars ++ ElemVars] ++
+				  [erl_syntax:list(
+				     [?AST(_el)],
+				     label_to_var('$_els'))]),
+		[erl_syntax:clause(SubElPattern, none, [SubElBody])];
+            true ->
                 SubElBody = erl_syntax:case_expr(
 			      ?AST(proplists:get_bool(ignore_els, __Opts)),
 			      [erl_syntax:clause(
@@ -1538,7 +1532,9 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
 					 [?AST(__TopXMLNS),
 					  ?AST(__Opts),
 					  ?AST(_els)|CDataVars ++ ElemVars] ++
-					     [label_to_var('$_els')])]),
+					     [erl_syntax:list(
+						[?AST(_el)],
+						label_to_var('$_els'))])]),
 				    erl_syntax:clause(
 				      [?AST(Mod)],
 				      none,
@@ -1551,64 +1547,7 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
 						[?AST(Mod:do_decode(_name, __XMLNS, _el, __Opts))],
 						label_to_var('$_els'))])])])])]),
                 [erl_syntax:clause(SubElPattern, none, [SubElBody])];
-            {false, true} ->
-                SubElBody = make_function_call(
-                              FunName,
-                              [?AST(__TopXMLNS),
-			       ?AST(__Opts),
-			       ?AST(_els)|CDataVars ++ ElemVars] ++
-                                  [erl_syntax:list(
-                                     [?AST(_el)],
-                                     label_to_var('$_xmls'))]),
-                [erl_syntax:clause(SubElPattern, none, [SubElBody])];
-            {true, true} ->
-                SubElBody = erl_syntax:case_expr(
-			      ?AST(proplists:get_bool(ignore_els, __Opts)),
-			      [erl_syntax:clause(
-				 [?AST(true)],
-				 none,
-				 [make_function_call(
-                                    FunName,
-                                    [?AST(__TopXMLNS),
-				     ?AST(__Opts),
-				     ?AST(_els)|CDataVars ++ ElemVars] ++
-                                        [label_to_var('$_els')] ++
-                                        [erl_syntax:list(
-                                           [?AST(_el)],
-                                           label_to_var('$_xmls'))])]),
-			       erl_syntax:clause(
-				 [?AST(false)],
-				 none,
-				 [?AST(__XMLNS = '?a(ModName)':get_attr(
-						   <<"xmlns">>, _attrs, __TopXMLNS)),
-				  erl_syntax:case_expr(
-				    ?AST('?a(ModName)':get_mod(_name, __XMLNS)),
-				    [erl_syntax:clause(
-				       [?AST(undefined)],
-				       none,
-				       [make_function_call(
-					  FunName,
-					  [?AST(__TopXMLNS),
-					   ?AST(__Opts),
-					   ?AST(_els)|CDataVars ++ ElemVars] ++
-					      [label_to_var('$_els')] ++
-					      [erl_syntax:list(
-						 [?AST(_el)],
-						 label_to_var('$_xmls'))])]),
-				     erl_syntax:clause(
-				       [?AST(Mod)],
-				       none,
-				       [make_function_call(
-					  FunName,
-					  [?AST(__TopXMLNS),
-					   ?AST(__Opts),
-					   ?AST(_els)|CDataVars ++ ElemVars] ++
-					      [erl_syntax:list(
-						 [?AST(Mod:do_decode(_name, __XMLNS, _el, __Opts))],
-						 label_to_var('$_els'))]
-					  ++ [label_to_var('$_xmls')])])])])]),
-                [erl_syntax:clause(SubElPattern, none, [SubElBody])];
-            {false, false} ->
+            false ->
                 []
         end,
     PassClause = if SubElVars == []; CDataVars == [] ->
@@ -1616,13 +1555,13 @@ make_els_dec_fun(Mod, FunName, CData, HaveCData, SubElVars, XmlElVars, Refs, Tag
                             [?AST(__TopXMLNS),
 			     ?AST(__Opts),
 			     ?AST([_ | _els])|
-			     CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars],
+			     CDataVars ++ ElemVars ++ SubElVars],
                             none,
                             [make_function_call(
                                FunName,
                                [?AST(__TopXMLNS),
 				?AST(__Opts), ?AST(_els)
-				|CDataVars ++ ElemVars ++ SubElVars ++ XmlElVars])])];
+				|CDataVars ++ ElemVars ++ SubElVars])])];
                     true ->
                          []
                  end,
@@ -1761,7 +1700,6 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
     CDataLabel = CData#cdata.label,
     HaveCData = have_label(Result, CDataLabel),
     HaveRefs = Refs /= [],
-    HaveXMLs = have_label(Result, '$_xmls'),
     HaveEls = have_label(Result, '$_els'),
     NewTopXMLNSCall =
 	make_function_call(
@@ -1790,20 +1728,6 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                          false ->
                              ?AST([])
                      end,
-    XmlElGenerator = case {have_label(Result, '$_xmls'),
-                           have_label(Result, '$_els')} of
-                         {true, true} ->
-                             erl_syntax:infix_expr(
-                               label_to_var('$_xmls'),
-                               erl_syntax:operator("++"),
-                               SubElGenerator);
-                         {true, false} ->
-                             label_to_var('$_xmls');
-                         {false, true} ->
-                             SubElGenerator;
-                         {false, false} ->
-                             ?AST([])
-                     end,
     RefsFun = lists:foldr(
 		fun({Label, _}, Acc) ->
 			Var = label_to_var(Label),
@@ -1826,12 +1750,12 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                   true ->
 		       ?AST([])
                end,
-    ResFun = if (HaveCData or HaveRefs) and (HaveXMLs or HaveEls) ->
-		     ?AST('?XmlElGenerator' ++ '?CDataFun');
+    ResFun = if (HaveCData or HaveRefs) and HaveEls ->
+		     ?AST('?SubElGenerator' ++ '?CDataFun');
 		HaveCData or HaveRefs ->
 		     CDataFun;
-		HaveXMLs or HaveEls ->
-		     XmlElGenerator;
+		HaveEls ->
+		     SubElGenerator;
 		true ->
 		     ?AST([])
 	     end,
@@ -2042,8 +1966,6 @@ label_to_record_field(Label) ->
     case atom_to_list(Label) of
         "$_els" ->
             sub_els;
-        "$_xmls" ->
-            xml_els;
         [$$|T] ->
             list_to_atom(T)
     end.
@@ -2282,8 +2204,6 @@ get_label_type(Label, Elem, Dict, FunSpecs, Opts) ->
 			erl_types:t_any()
 		end,
             {erl_types:t_list(T), [], false};
-        xml_els ->
-            {erl_types:t_list(XMLType), [], false};
 	'_' ->
 	    {erl_types:t_from_term(undefined), [], false};
 	#attr{dec = undefined, default = Default, required = IsRequired} ->
@@ -2522,7 +2442,7 @@ check_labels(#elem{result = Result, attrs = Attrs,
     ResultSet = sets:from_list(ResultLabels),
     AllSet = sets:from_list(AllLabels),
     UnresolvedLabels = sets:to_list(
-                         sets:subtract(ResultSet, AllSet)) -- ['$_els', '$_xmls', '$_'],
+                         sets:subtract(ResultSet, AllSet)) -- ['$_els', '$_'],
     UnusedLabels = sets:to_list(sets:subtract(AllSet, ResultSet)) -- ['$cdata'],
     if UnresolvedLabels /= [] ->
             bad_spec({unresolved_labels, UnresolvedLabels});
@@ -2615,8 +2535,6 @@ is_label(Label) when not is_atom(Label) ->
 is_label(Label) ->
     case atom_to_list(Label) of
         "$_els" ->
-            true;
-        "$_xmls" ->
             true;
 	"$_" ->
 	    true;
