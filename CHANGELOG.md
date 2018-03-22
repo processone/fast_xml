@@ -1,3 +1,8 @@
+# Version 1.1.29
+
+* Fix compilation with rebar3
+* Get rid of $\_xmls label
+
 # Version 1.1.28
 * Include Makefile in package generated for hex
 
