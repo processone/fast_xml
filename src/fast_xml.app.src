@@ -26,7 +26,7 @@
   {vsn,          "1.1.29"},
   {modules,      []},
   {registered,   []},
-  {applications, [kernel, stdlib]},
+  {applications, [kernel, stdlib, p1_utils]},
   {mod,          {fast_xml,[]}},
 
   %% hex.pm packaging:
