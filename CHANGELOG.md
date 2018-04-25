@@ -1,3 +1,8 @@
+# Version 1.1.30
+
+* Improve detection of rebar3
+* Define p1\_utils as application dependency
+
 # Version 1.1.29
 
 * Updating p1_utils to version 1.0.11.
