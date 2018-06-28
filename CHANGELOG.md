@@ -1,3 +1,7 @@
+# Version 1.1.31
+
+* Updating p1_utils to version 1.0.12.
+
 # Version 1.1.30
 
 * Improve detection of rebar3
