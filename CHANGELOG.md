@@ -1,3 +1,7 @@
+# Version 1.1.32
+
+* Don't crash when trying to encode xmlcdata
+
 # Version 1.1.31
 
 * Updating p1_utils to version 1.0.12.
