@@ -2750,14 +2750,14 @@ t_remote(Mod, Type) ->
     T.
 -endif.
 
--ifdef(USE_MAPS).
-dict_from_list(L) ->
-    maps:from_list(L).
-dict_keys(D) ->
-    maps:keys(D).
--else.
+-ifdef(USE_DICT).
 dict_from_list(L) ->
     dict:from_list(L).
 dict_keys(D) ->
     dict:fetch_keys(D).
+-else.
+dict_from_list(L) ->
+    maps:from_list(L).
+dict_keys(D) ->
+    maps:keys(D).
 -endif.
