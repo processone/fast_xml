@@ -1,3 +1,7 @@
+# Version 1.1.33
+
+* Fix incompatibility with OTP21
+
 # Version 1.1.32
 
 * Don't crash when trying to encode xmlcdata
