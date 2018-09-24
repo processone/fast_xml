@@ -1,5 +1,6 @@
 # Version 1.1.33
 
+* Updating p1_utils to version 6ff85e8.
 * Fix incompatibility with OTP21
 
 # Version 1.1.32
