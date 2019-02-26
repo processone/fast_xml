@@ -32,7 +32,6 @@
   %% hex.pm packaging:
   {files, ["src/", "lib/", "c_src/fxml.c", "c_src/fxml_stream.c", "include/", "priv/lib/.keepme", "mix.exs", "mix.lock", "Makefile.mix", "rebar.config", "rebar.config.script", "README.md", "LICENSE.txt"]},
   {licenses, ["Apache 2.0"]},
-  {maintainers, ["ProcessOne"]},
   {links, [{"Github", "https://github.com/processone/fast_xml"}]}]}.
 
 %% Local Variables:
