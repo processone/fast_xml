@@ -262,7 +262,7 @@ recompile_resolver(Mods, ResolverMod) ->
 			       [io_lib:format("'~s'", [RecName]) |
 				["_" || _ <- lists:seq(1, RecSize)]],
 			       ","), M])
-		  end, Records) ++ ["lookup(_) -> undefined."],
+		  end, Records) ++ ["lookup(_) -> erlang:error(badarg)."],
 		";" ++ io_lib:nl()),
     Lookup2 = string:join(
 		lists:map(
@@ -2563,7 +2563,7 @@ consult(Path) ->
             {Terms, OtherForms} =
                 lists:foldl(
                   fun([Form], {Trms, Other}) ->
-                          Trm = 
+                          Trm =
                               erl_syntax_lib:map(
                                 fun(T) ->
                                         case erl_syntax:type(T) of
