@@ -464,7 +464,7 @@ write_resolver(_TaggedElems, ParentMod, ErlDirName, SpecFile) ->
     Compile = erl_syntax:attribute(?AST(compile), [?AST(export_all)]),
     AST = [make_function(modules, [], [?AST([])]),
 	   make_function(lookup, [?AST(_), ?AST(_)], [?AST(undefined)]),
-	   make_function(lookup, [?AST(_)], [?AST(undefined)])],
+	   make_function(lookup, [?AST(_)], [?AST(erlang:error(badarg))])],
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile|AST]),
     file:write_file(
       filename:join([ErlDirName, ModNameErl]),
@@ -965,15 +965,15 @@ make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
 		 erl_syntax:clause(
 		   [?AST(Name), ?AST(Arity)],
 		   none,
-		   [erl_syntax:case_expr(
-		      ?AST(get_mod(
-			     erlang:make_tuple(Arity+1, undefined, [{1, Name}]))),
+		   [erl_syntax:try_expr(
+		      [?AST(get_mod(
+			      erlang:make_tuple(Arity+1, undefined, [{1, Name}])))],
 		      [erl_syntax:clause(
-			 [?AST(undefined)], none, [?AST(no)]),
-		       erl_syntax:clause(
 			 [?AST(Mod)],
 			 none,
-			 [?AST(Mod:pp(Name, Arity))])])])];
+			 [?AST(Mod:pp(Name, Arity))])],
+		      [erl_syntax:clause(
+			 [?AST(error:badarg)], none, [?AST(no)])])])];
 	   true ->
 		[erl_syntax:clause([?AST(_), ?AST(_)], none, [?AST(no)])]
 	end,
