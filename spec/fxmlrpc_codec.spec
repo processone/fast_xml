@@ -59,7 +59,8 @@
 		   #ref{name = array, label = '$val', min = 0, max = 1},
 		   #ref{name = nil, label = '$val', min = 0, max = 1},
 		   #ref{name = struct, label = '$val', min = 0, max = 1},
-		   #ref{name = dateTime, label = '$val', min = 0, max = 1}]}).
+		   #ref{name = dateTime, label = '$val', min = 0, max = 1}],
+	   cdata = #cdata{default = undefined}}).
 
 -xml(i4,
      #elem{name = <<"i4">>,

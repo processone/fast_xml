@@ -1051,10 +1051,10 @@ encode_value({Val, Cdata}, __TopXMLNS) ->
 		    _acc) ->
     [encode_dateTime(Val, __TopXMLNS) | _acc].
 
-decode_value_cdata(__TopXMLNS, <<>>) -> <<>>;
+decode_value_cdata(__TopXMLNS, <<>>) -> undefined;
 decode_value_cdata(__TopXMLNS, _val) -> _val.
 
-encode_value_cdata(<<>>, _acc) -> _acc;
+encode_value_cdata(undefined, _acc) -> _acc;
 encode_value_cdata(_val, _acc) ->
     [{xmlcdata, _val} | _acc].
 

@@ -26,6 +26,7 @@
 -export([decode/1, encode/1]).
 
 -include("fxml.hrl").
+-define(NS_XMLRPC, <<"xmlrpc">>).
 
 -type value() :: number() | binary() | boolean() | nil |
 		 {base64, binary()} |
@@ -43,7 +44,7 @@
 -spec decode(xmlel()) -> {ok, call()} | {ok, response()} | {error, any()}.
 
 decode(El) ->
-    try fxmlrpc_codec:decode(El) of
+    try fxmlrpc_codec:decode(El, ?NS_XMLRPC, []) of
 	{call, Name, Params} ->
 	    {ok, {call, Name, [decode_param(Param) || Param <- Params]}};
 	{response, Params} when is_list(Params) ->
@@ -73,14 +74,19 @@ decode(El) ->
 -spec encode(call() | response()) -> xmlel().
 
 encode({call, Name, Params}) ->
-    fxmlrpc_codec:encode({call, Name, [encode_param(Param) || Param <- Params]});
+    fxmlrpc_codec:encode(
+      {call, Name, [encode_param(Param) || Param <- Params]},
+      ?NS_XMLRPC);
 encode({response, Params}) when is_list(Params) ->
-    fxmlrpc_codec:encode({response, [encode_param(Param) || Param <- Params]});
+    fxmlrpc_codec:encode(
+      {response, [encode_param(Param) || Param <- Params]},
+      ?NS_XMLRPC);
 encode({response, {fault, Code, String}}) ->
     fxmlrpc_codec:encode(
       {response, {fault, {{struct, [{faultCode, {{int, Code}, undefined}},
 				    {faultString, {{string, String}, undefined}}]},
-			  undefined}}}).
+			  undefined}}},
+      ?NS_XMLRPC).
 
 %%%===================================================================
 %%% Internal functions
