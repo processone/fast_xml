@@ -262,7 +262,7 @@ recompile_resolver(Mods, ResolverMod) ->
 			       [io_lib:format("'~s'", [RecName]) |
 				["_" || _ <- lists:seq(1, RecSize)]],
 			       ","), M])
-		  end, Records) ++ ["lookup(_) -> erlang:error(badarg)."],
+		  end, Records) ++ ["lookup(Term) -> erlang:error(badarg, [Term])."],
 		";" ++ io_lib:nl()),
     Lookup2 = string:join(
 		lists:map(
@@ -464,7 +464,7 @@ write_resolver(_TaggedElems, ParentMod, ErlDirName, SpecFile) ->
     Compile = erl_syntax:attribute(?AST(compile), [?AST(export_all)]),
     AST = [make_function(modules, [], [?AST([])]),
 	   make_function(lookup, [?AST(_), ?AST(_)], [?AST(undefined)]),
-	   make_function(lookup, [?AST(_)], [?AST(erlang:error(badarg))])],
+	   make_function(lookup, [?AST(Term)], [?AST(erlang:error(badarg, [Term]))])],
     ResultAST = erl_syntax:form_list([Hdr, Module, Compile|AST]),
     file:write_file(
       filename:join([ErlDirName, ModNameErl]),
