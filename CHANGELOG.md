@@ -1,3 +1,8 @@
+# Version 1.1.37
+
+* Update XMLRPC codec
+* Fail with 'badarg' on unknown records
+
 # Version 1.1.36
 
 * Updating p1_utils to version 1.0.15.
