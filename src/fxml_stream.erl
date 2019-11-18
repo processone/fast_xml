@@ -27,6 +27,8 @@
 
 -compile(no_native).
 
+-on_load(init/0).
+
 -export([new/1, new/2, new/3, parse/2, close/1, reset/1,
 	 change_callback_pid/2, parse_element/1]).
 
@@ -52,6 +54,9 @@
 -type stack() :: [xmlel()].
 
 -export_type([xml_stream_state/0, xml_stream_el/0]).
+
+init() ->
+    ok = load_nif().
 
 load_nif() ->
     SOPath = p1_nif_utils:get_so_path(?MODULE, [fast_xml], "fxml_stream"),

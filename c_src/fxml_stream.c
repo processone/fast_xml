@@ -810,6 +810,11 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
   return 0;
 }
 
+static int upgrade(ErlNifEnv* env, void** priv, void** old_priv, ERL_NIF_TERM load_info)
+{
+  return load(env, priv, load_info);
+}
+
 static ERL_NIF_TERM make_parse_error(ErlNifEnv *env, XML_Parser parser)
 {
   enum XML_Error errcode = XML_GetErrorCode(parser);
@@ -1057,4 +1062,4 @@ static ErlNifFunc nif_funcs[] =
     {"change_callback_pid", 2, change_callback_pid_nif}
   };
 
-ERL_NIF_INIT(fxml_stream, nif_funcs, load, NULL, NULL, NULL)
+ERL_NIF_INIT(fxml_stream, nif_funcs, load, NULL, upgrade, NULL)

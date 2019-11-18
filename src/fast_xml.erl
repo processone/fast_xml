@@ -49,14 +49,7 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_StartType, _StartArgs) ->
-    case {fxml:load_nif(), fxml_stream:load_nif()} of
-        {ok, ok} ->
-            fxml_sup:start_link();
-        {{error,_} = E1, _} ->
-            E1;
-        {_, {error,_} = E2} ->
-            E2
-    end.
+    fxml_sup:start_link().
 
 %%--------------------------------------------------------------------
 %% @private
