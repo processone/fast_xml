@@ -1,3 +1,7 @@
+# Version 1.1.40
+
+* Fix issues with travis testing
+
 # Version 1.1.39
 
 * Updating p1_utils to version 1.0.18.
