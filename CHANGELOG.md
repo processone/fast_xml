@@ -1,3 +1,7 @@
+# Version 1.1.42
+
+* Fix compilation with Erlang/OTP 23.0
+
 # Version 1.1.41
 
 * Updating p1_utils to version 1.0.19.
