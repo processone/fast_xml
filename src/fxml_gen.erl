@@ -368,7 +368,7 @@ compile(TaggedElems0, Forms, Path, Opts) ->
 		     dict:append_list(
 		       Elem#elem.module,
 		       elem_to_AST(Elem, Tag, TaggedElems, Types,
-				   ModName, PredefRecords, Opts),
+				   ModName, PredefRecords, FunSpecs, Opts),
 		       Acc)
 	     end, dict:from_list([{ModName, []}]), TaggedElems),
     Records = make_records(Types, TaggedElems, PredefRecords, FunSpecs, Opts),
@@ -484,8 +484,10 @@ get_predefined_records(AttrForms) ->
 	      case erl_syntax_lib:analyze_attribute(F) of
 		  {record, {RecName, RecAttrs}} ->
 		      RecAttrs1 = lists:map(
-				    fun({Attr, {Default, _}}) -> {Attr, Default};
-				       ({Attr, Default}) -> {Attr, Default}
+				    fun({Attr, {Default, Type}}) ->
+                                            {Attr, Default, Type};
+				       ({Attr, Default}) ->
+                                            {Attr, Default, undefined}
 				    end, RecAttrs),
 		      dict:store(RecName, RecAttrs1, Acc);
 		  _ ->
@@ -622,7 +624,7 @@ make_typespecs(_ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
     case proplists:get_value(add_type_specs, Opts) of
 	TypeName when is_atom(TypeName), TypeName /= undefined ->
 	    case [[atom_to_string(R), "()"]
-		  || {record, R} <- dict_keys(RecDict)] of
+		  || {record, R} <- lists:sort(dict_keys(RecDict))] of
 		[] ->
 		    [];
 		Records ->
@@ -834,8 +836,24 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
 		none,
 		[?AST(Mod = get_mod(El)),
 		 ?AST(Mod:do_encode(El, TopXMLNS))]),
+    JClause1 = erl_syntax:clause(
+                 [?AST({xmlel, _, _, _} = El)],
+                 none,
+                 [?AST(encode_json(
+                         try
+                             decode(El)
+                         catch
+                            _:_ ->
+                                 [<<"XmlString">>, fxml:element_to_binary(El)]
+                         end))]),
+    JClause3 = erl_syntax:clause(
+                 [?AST(El)],
+                 none,
+                 [?AST(Mod = get_mod(El)),
+                  ?AST(Mod:do_encode_json(El))]),
     [make_function(encode, [?AST(El)], [?AST(encode(El, <<>>))]),
      erl_syntax:function(?AST(encode), [Clause1, Clause2, Clause3]),
+     erl_syntax:function(?AST(encode_json), [JClause1, JClause3]),
      make_function(get_name, [?AST(El)], GetNameCase),
      make_function(get_ns, [?AST(El)], GetNSCase),
      make_function(is_known_tag,
@@ -865,11 +883,11 @@ make_encoders(TaggedSpecs, ModName) ->
 	     (_, Acc) ->
 		  Acc
 	  end, {dict:new(), dict:new()}, TaggedSpecs),
-    {EncClauses, NSClauses, TagClauses, _} =
+    {EncClauses, EncJSONClauses, NSClauses, TagClauses, _} =
         lists:foldl(
           fun({Tag, #elem{name = Name, xmlns = XMLNS, module = Mod,
 			  result = Result, attrs = Attrs}},
-	      {EncAcc, NSAcc, TagAcc, Seen}) ->
+	      {EncAcc, EncJSONAcc, NSAcc, TagAcc, Seen}) ->
 		  XMLNSLabel = case lists:keyfind(<<"xmlns">>, #attr.name, Attrs) of
 				   #attr{label = L, name = N} ->
 				       prepare_label(L, N);
@@ -915,6 +933,17 @@ make_encoders(TaggedSpecs, ModName) ->
 					   []
 				   end ++ EncAcc
 		       end,
+		       if AlreadySeen ->
+			       EncJSONAcc;
+			  true ->
+			       Call = [make_function_call(
+					 make_enc_fun_name(ModName, Mod,
+                                                           [Tag, json]),
+					 [Var])],
+			       [erl_syntax:clause(
+				  [?AST('?EncodeResult' = '?Var')],
+				  none, Call)] ++ EncJSONAcc
+		       end,
 		       if IsDuplicated ->
 			       NSAcc;
 			  HasXMLNSAttr ->
@@ -939,11 +968,12 @@ make_encoders(TaggedSpecs, ModName) ->
 		       end,
 		       [Result|Seen]}
                   catch _:_ ->
-                          {EncAcc, NSAcc, TagAcc, Seen}
+                          {EncAcc, EncJSONAcc, NSAcc, TagAcc, Seen}
                   end
-          end, {[], [], [], []}, TaggedSpecs),
+          end, {[], [], [], [], []}, TaggedSpecs),
     if EncClauses /= [] ->
-	    [erl_syntax:function(?AST(do_encode), EncClauses)];
+	    [erl_syntax:function(?AST(do_encode), EncClauses),
+             erl_syntax:function(?AST(do_encode_json), EncJSONClauses)];
        true -> []
     end ++
     if TagClauses /= [] ->
@@ -1002,7 +1032,7 @@ make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
                       [Tag|_] = dict:fetch(H, RecNames),
 		      Fields = case dict:find(H, PredefRecords) of
 				   {ok, Fs} ->
-				       [FName || {FName, _} <- Fs];
+				       [FName || {FName, _, _} <- Fs];
 				   error ->
 				       [label_to_record_field(F) || F <- T]
 			       end,
@@ -1050,7 +1080,7 @@ make_getters_setters(TaggedSpecs, PredefRecords, ModName) ->
                       [Tag|_] = dict:fetch(H, RecNames),
 		      Fields = case dict:find(H, PredefRecords) of
 				   {ok, Fs} ->
-				       [FName || {FName, _} <- Fs];
+				       [FName || {FName, _, _} <- Fs];
 				   error ->
 				       [label_to_record_field(F) || F <- T]
 			       end,
@@ -1083,7 +1113,7 @@ make_getters_setters(TaggedSpecs, PredefRecords, ModName) ->
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem,
-            Tag, AllElems, Types, ModName, PredefRecords, Opts) ->
+            Tag, AllElems, Types, ModName, PredefRecords, FunSpecs, Opts) ->
     AttrAST = lists:flatmap(
                 fun(#attr{name = AttrName,
                           required = Required,
@@ -1118,7 +1148,9 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
     DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types,
 			       ModName, PredefRecords, Opts),
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems, ModName),
-    DecAST ++ EncAST ++ AttrAST ++ CDataAST.
+    EncJsonAST = make_elem_enc_fun_json(Elem, Tag, AllElems, ModName,
+                                        Types, FunSpecs, PredefRecords, Opts),
+    DecAST ++ EncAST ++ EncJsonAST ++ AttrAST ++ CDataAST.
 
 %% Replace in `Term' every label found in `Labels'
 %% with the corresponding value.
@@ -1134,7 +1166,7 @@ subst_labels(Term, PredefRecords) ->
 		RecName = erl_syntax:atom_value(H),
 		RecFields = dict:fetch(RecName, PredefRecords),
 		Vars = lists:map(
-			 fun({T, {_, Default}}) ->
+			 fun({T, {_, Default, _}}) ->
 				 AbsDefault = if Default == none ->
 						      ?AST(undefined);
 						 true ->
@@ -1784,6 +1816,537 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
 	   ?AST({xmlel, '?a(ElemName)', _attrs, _els})
           ])])] ++ make_ref_enc_funs(Elem, Tag, AllElems).
 
+make_elem_enc_fun_json(
+  #elem{result = Result, attrs = Attrs,
+        name = ElemName,
+        cdata = CData, refs = Refs} = Elem,
+  Tag, AllElems, ModName, Types, FunTypes, PredefRecords, Opts) ->
+io:format("refs ~p~n", [{Tag, Refs, Result}]),
+    case term_is_record(Result) of
+        true ->
+            {_Tags, RecTypes, _RecDict} = Types,
+            [RecName | RecLabels] = tuple_to_list(Result),
+            ConvertLabelFun =
+                fun(Label, {K, ASTs}) ->
+                        InVar = erl_syntax:variable(
+                                  "_fields" ++ integer_to_list(K)),
+                        OutVar = erl_syntax:variable(
+                                   "_fields" ++ integer_to_list(K + 1)),
+                        case is_label(Label) of
+                            true ->
+                                FName = label_to_record_field(Label),
+                                FBName = atom_to_binary(FName, utf8),
+                                                %{FType, Default, IsRequired} = get_label_type(Label, Elem, RecTypes, FunTypes, Opts),
+                                                %JSONType = get_json_type(FType, Default, IsRequired, RecTypes),
+                                JSONType = get_label_json_type(
+                                             Label, Elem, RecTypes,
+                                             FunTypes, AllElems, Opts),
+                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                Value =
+                                    encode_json_field(
+                                      JSONType, Label, InVar, FBName,
+                                      Elem#elem.module, ModName),
+                                Assign = ?AST('?OutVar' = '?Value'),
+                                                %erl_syntax:tuple([?AST('?a(FBName)'), Value]),
+                                {K + 1, [Assign | ASTs]};
+                            false ->
+                                {ok, RecFields} = dict:find(RecName, PredefRecords),
+                                {FName, _, _} = lists:nth(K + 1, RecFields),
+                                FBName = atom_to_binary(FName, utf8),
+                                BLabel = atom_to_binary(Label, utf8),
+                                Value = ?AST([{'?a(FBName)', '?a(BLabel)'} |
+                                              '?InVar']),
+                                Assign = ?AST('?OutVar' = '?Value'),
+                                {K + 1, [Assign | ASTs]}
+                        end
+                end,
+            {K, MakeJSON} =
+                lists:foldl(ConvertLabelFun, {0, []}, lists:reverse(RecLabels)),
+            RecFieldsJSON = erl_syntax:variable("_fields" ++ integer_to_list(K)),
+                                                %RecFieldsJSON =
+                                                %    erl_syntax:list(
+                                                %      lists:map(ConvertLabelFun, RecLabels)),
+            RecJSON =
+                erl_syntax:tuple(
+                  [RecFieldsJSON]),
+            BRecName = atom_to_binary(RecName, utf8),
+            JSON = erl_syntax:list(
+                     [?AST('?a(BRecName)'), RecJSON]),
+            [erl_syntax:function(
+               erl_syntax:atom(make_enc_fun_name([Tag, json])),
+               [erl_syntax:clause(
+                  [subst_labels(Result)],
+                  none,
+                  [?AST(_fields0 = [])] ++
+                  lists:reverse(MakeJSON) ++
+                  [JSON]
+                 )])];
+        false when is_tuple(Result) ->
+            {_Tags, RecTypes, _RecDict} = Types,
+            RecLabels = tuple_to_list(Result),
+            ConvertLabelFun =
+                fun(Label, {K, ASTs}) ->
+                        InVar = erl_syntax:variable(
+                                  "_fields" ++ integer_to_list(K)),
+                        OutVar = erl_syntax:variable(
+                                   "_fields" ++ integer_to_list(K + 1)),
+                        case is_label(Label) of
+                            true ->
+                                FName = label_to_record_field(Label),
+                                FBName = atom_to_binary(FName, utf8),
+                                JSONType = get_label_json_type(
+                                             Label, Elem, RecTypes,
+                                             FunTypes, AllElems, Opts),
+                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                VLabel = label_to_var(Label),
+                                Res = encode_json_field2(
+                                        JSONType, VLabel,
+                                        Elem#elem.module, ModName),
+                                Value = ?AST(['?Res' | '?InVar']),
+                                Assign = ?AST('?OutVar' = '?Value'),
+                                                %erl_syntax:tuple([?AST('?a(FBName)'), Value]),
+                                {K + 1, [Assign | ASTs]};
+                            false ->
+                                BLabel = atom_to_binary(Label, utf8),
+                                Value = ?AST(['?a(BLabel)' | '?InVar']),
+                                Assign = ?AST('?OutVar' = '?Value'),
+                                {K + 1, [Assign | ASTs]}
+                        end
+                end,
+            {K, MakeJSON} =
+                lists:foldl(ConvertLabelFun, {0, []}, lists:reverse(RecLabels)),
+            RecFieldsJSON = erl_syntax:variable("_fields" ++ integer_to_list(K)),
+                                                %RecFieldsJSON =
+                                                %    erl_syntax:list(
+                                                %      lists:map(ConvertLabelFun, RecLabels)),
+            JSON = RecFieldsJSON,
+            [erl_syntax:function(
+               erl_syntax:atom(make_enc_fun_name([Tag, json])),
+               [erl_syntax:clause(
+                  [subst_labels(Result)],
+                  none,
+                  [?AST(_fields0 = [])] ++
+                  lists:reverse(MakeJSON) ++
+                  [JSON]
+                 )])];
+        false when is_atom(Result) ->
+io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
+            Label = Result,
+            {_Tags, RecTypes, _RecDict} = Types,
+            Res =
+                case is_label(Label) of
+                    true ->
+                        JSONType = get_label_json_type(
+                                     Label, Elem, RecTypes,
+                                     FunTypes, AllElems, Opts),
+                        io:format("ref ~p~n", [{Label, JSONType}]),
+                        VLabel = label_to_var(Label),
+                        encode_json_field2(
+                          JSONType, ?AST(_val),
+                          Elem#elem.module, ModName);
+                    false ->
+                        BLabel = atom_to_binary(Label, utf8),
+                        ?AST('?a(BLabel)')
+                end,
+            [erl_syntax:function(
+               erl_syntax:atom(make_enc_fun_name([Tag, json])),
+               [erl_syntax:clause(
+                  [?AST(_val)],
+                  none,
+                  [Res]
+                 )])];
+        false ->
+io:format("refs2 ~p~n", [{Tag, Refs, Result}]),
+            []
+    end.
+
+encode_json_field(Type, Label, InVar, FBName, ModName, TopModName) ->
+    VLabel = label_to_var(Label),
+    case Type of
+        ignore ->
+            InVar;
+        {option, SubType, Default} ->
+            Res = encode_json_field2(SubType, VLabel, ModName, TopModName),
+            ?AST(case '?VLabel' of
+                     '?a(Default)' -> '?InVar';
+                     _ -> [{'?a(FBName)', '?Res'} | '?InVar']
+                 end
+                );
+        _ ->
+            Res = encode_json_field2(Type, VLabel, ModName, TopModName),
+            ?AST([{'?a(FBName)', '?Res'} | '?InVar'])
+    end.
+
+encode_json_field2(Type, InVar, ModName, TopModName) ->
+    case Type of
+        [T] ->
+            encode_json_field2(T, InVar, ModName, TopModName);
+        binary -> InVar;
+        integer -> InVar;
+        boolean -> InVar;
+        {binary, _DecFun, EncFun} ->
+            case EncFun of
+                {M, F, Args} ->
+                    make_function_call(
+                      {M, F},
+                      [InVar |
+                       [abstract(Arg) || Arg <- Args]]);
+                {F, Args} ->
+                    make_function_call(
+                      F,
+                      [InVar |
+                       [abstract(Arg) || Arg <- Args]]);
+                undefined ->
+                    InVar
+            end;
+        %{undefined, SubType} ->
+        %    Res = encode_json_field(SubType, Label, InVar, FBName, ModName),
+        %    ?AST(case '?VLabel' of
+        %             undefined -> '?InVar';
+        %             _ -> '?Res'
+        %         end
+        %        );
+        {external, _, RefMod, RefTag} ->
+            io:format("ext ~p~n", [Type]),
+            make_function_call(
+              make_enc_fun_name(ModName, RefMod, [RefTag, json]),
+              [InVar]);
+        {list, T} ->
+            Res = encode_json_field2(T, ?AST(_X), ModName, TopModName),
+            ?AST(lists:map(fun(_X) -> '?Res' end, '?InVar'));
+        {tuple, Args} ->
+            Pattern =
+                erl_syntax:tuple(
+                  lists:map(
+                    fun(I) ->
+                            erl_syntax:variable("_X" ++ integer_to_list(I))
+                    end, lists:seq(1, length(Args)))),
+            Tuple =
+                erl_syntax:list(
+                  lists:map(
+                    fun(I) ->
+                            Var = erl_syntax:variable(
+                                    "_X" ++ integer_to_list(I)),
+                            encode_json_field2(lists:nth(I, Args), Var,
+                                               ModName, TopModName)
+                    end, lists:seq(1, length(Args)))),
+            ?AST(fun('?Pattern') ->
+                         '?Tuple'
+                 end('?InVar'));
+        timestamp ->
+            ?AST(tuple_to_list('?InVar'));
+        ip_address ->
+            ?AST(enc_ip('?InVar'));
+        jid ->
+            ?AST(fun({jid, _U, _S, _R, _LU, _LS, _LR}) ->
+                         {[{<<"user">>, _U},
+                           {<<"server">>, _S},
+                           {<<"resource">>, _R},
+                           {<<"luser">>, _LU},
+                           {<<"lserver">>, _LS},
+                           {<<"lresource">>, _LR}
+                          ]}
+                 end('?InVar'));
+        {atom, unknown} ->
+            io:format("asd ~p~n", [Type]),
+            InVar;
+        {atom, _} ->
+            encode_json_case([Type], InVar, ModName, TopModName);
+        Types when is_list(Types) ->
+            encode_json_case(Types, InVar, ModName, TopModName);
+        {option, SubType, Default} ->
+            Res = encode_json_field2(SubType, InVar, ModName, TopModName),
+            ?AST(case '?InVar' of
+                     '?a(Default)' -> <<"None">>;
+                     _ -> [<<"Some">>, '?Res']
+                 end
+                );
+        els ->
+            erl_syntax:list_comp(
+              ?AST('?a(TopModName)':encode_json(_el)),
+              [erl_syntax:generator(?AST(_el), InVar)]);
+        _ ->
+            io:format("asd ~p~n", [Type]),
+            InVar
+    end.
+
+encode_json_case(Types, InVar, ModName, TopModName) ->
+    io:format("cases' ~p~n", [Types]),
+    TMap =
+        lists:foldl(
+          fun({atom, Atoms}, Map) ->
+                  lists:foldl(
+                    fun(Atom, Acc) ->
+                            case maps:find(Atom, Acc) of
+                                {ok, atom} ->
+                                    Acc;
+                                {ok, T} ->
+                                    erlang:error({conflicting_types,
+                                                  {atom, Acc}, T});
+                                error ->
+                                    maps:put(Atom, atom, Acc)
+                            end
+                    end, Map, Atoms);
+             ({external, {record, Tag, _}, _, _} = Rec, Map) ->
+                  case maps:find(Tag, Map) of
+                      {ok, Rec} ->
+                          Map;
+                      {ok, T} ->
+                          erlang:error({conflicting_types, Rec, T});
+                      error ->
+                          maps:put(Tag, Rec, Map)
+                  end
+          end, maps:new(), Types),
+    io:format("cases ~p~n", [TMap]),
+    Clauses =
+        lists:map(
+          fun({Atom, atom}) ->
+                  BAtom = atom_to_binary(Atom, utf8),
+                  erl_syntax:clause(
+                    [?AST('?a(Atom)')],
+                    none,
+                    [?AST('?a(BAtom)')]);
+             ({Tag, {external, {record, Tag, Arity}, _, _} = Rec}) ->
+                  Pattern =
+                      erl_syntax:tuple(
+                        [erl_syntax:atom(Tag) |
+                         lists:duplicate(Arity, erl_syntax:underscore())
+                        ]
+                       ),
+                  Res = encode_json_field2(Rec, InVar, ModName, TopModName),
+                  erl_syntax:clause(
+                    [Pattern],
+                    none,
+                    [Res])
+          end, maps:to_list(TMap)),
+    erl_syntax:case_expr(InVar, Clauses).
+
+get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems, Opts) ->
+    case get_spec_by_label(Label, Elem) of
+        sub_els ->
+            %XMLType = t_remote(fxml, xmlel),
+	    %T = case proplists:get_value(add_type_specs, Opts) of
+	    %        SpecName when is_atom(SpecName), SpecName /= undefined ->
+            %            io:format("sub_els1 ~p~n", [{SpecName, Opts}]),
+	    %    	erl_types:t_sup([XMLType, t_identifier(SpecName)]);
+	    %        _ ->
+            %            io:format("sub_els2 ~p~n", [Label]),
+	    %    	erl_types:t_any()
+	    %    end,
+            %{todo, erl_types:t_list(T), [], false};
+            els;
+	'_' ->
+	    ignore;
+	#attr{dec = undefined, default = Default,
+              required = false} when is_atom(Default) ->
+            {option, binary, Default};
+	#attr{dec = undefined, default = _Default, required = _IsRequired} ->
+            binary;
+        #attr{dec = DecFun, enc = EncFun, default = Default, required = IsRequired} ->
+            case json_use_enc_dec(DecFun) of
+                true ->
+                    case {Default, IsRequired} of
+                        {undefined, false} ->
+                            {option, {binary, DecFun, EncFun}, Default};
+                        _ ->
+                            {binary, DecFun, EncFun}
+                    end;
+                false ->
+                    FType = get_fun_return_type(DecFun, FunSpecs),
+                    get_json_type(FType, Default, IsRequired)
+            end;
+	#cdata{dec = undefined, default = Default,
+               required = false} when is_atom(Default) ->
+            {option, binary, Default};
+	#cdata{dec = undefined, default = _Default, required = _IsRequired} ->
+            binary;
+        #cdata{dec = DecFun, enc = EncFun, default = Default, required = IsRequired} ->
+            case json_use_enc_dec(DecFun) of
+                true ->
+                    case {Default, IsRequired} of
+                        {undefined, false} ->
+                            {option, {binary, DecFun, EncFun}, Default};
+                        _ ->
+                            {binary, DecFun, EncFun}
+                    end;
+                false ->
+                    FType = get_fun_return_type(DecFun, FunSpecs),
+                    get_json_type(FType, Default, IsRequired)
+            end;
+        [#ref{min = Min, max = Max, default = Default}|_] = Refs ->
+            Types = lists:map(
+                      fun(#ref{name = RefTag}) ->
+                              case dict:find(RefTag, Dict) of
+				  {ok, T} ->
+                                      case get_json_type2(T) of
+                                          %{record, _RecName, _RecSize} = Rec ->
+                                          %    RefElem = get_elem_by_ref(RefTag, AllElems),
+                                          %    RefMod = RefElem#elem.module,
+                                          %    {external, Rec, RefMod, RefTag};
+                                          %{tuple, _} = Tuple ->
+                                          %    RefElem = get_elem_by_ref(RefTag, AllElems),
+                                          %    RefMod = RefElem#elem.module,
+                                          %    {external, Tuple, RefMod, RefTag};
+                                          %RT -> RT
+                                          {atom, _} = RT -> RT;
+                                          RT ->
+                                              RefElem = get_elem_by_ref(RefTag, AllElems),
+                                              RefMod = RefElem#elem.module,
+                                              {external, RT, RefMod, RefTag}
+                                      end;
+				  error ->
+                                      erlang:error({internal_error, ?MODULE})
+			      end
+                      end, Refs),
+            if true orelse length(Refs) > 1 ->
+                    io:format("qaz ~p~n", [{Refs, Types}]);
+               true -> ok
+            end,
+            %Type = erl_types:t_sup(Types),
+            IsRequired = (Min == 1) and (Max == 1),
+            case {Default, IsRequired, Max} of
+                {undefined, false, 1} ->
+                    {option, Types, Default};
+                {_, _, 1} ->
+                    Types;
+                _ ->
+                    {list, Types}
+                    %{todo,
+                    % erl_types:t_list(
+                    %   erl_types:t_subtract(
+                    %     Type, erl_types:t_from_term(Default))),
+                    % [], false}
+            end
+    end.
+
+get_json_type(FType, Default, IsRequired) ->
+    IsRaw = is_json_raw_type(FType),
+    case {Default, IsRequired, IsRaw} of
+        {undefined, false, {true, T}} ->
+            {option, T, Default};
+        {_Default, _, {true, T}} ->
+            T;
+        {undefined, true, _} ->
+            get_json_type2(FType);
+        {undefined, false, _} ->
+            {option, get_json_type2(FType), Default};
+        {_Default, _, _} ->
+            get_json_type2(FType)
+    end.
+
+get_json_complex_type(FType) ->
+    case erl_types:t_is_tuple(FType) of
+        true ->
+            case erl_types:t_tuple_args(FType) of
+                [ATag] ->
+                    case erl_types:t_is_atom(ATag) of
+                        true ->
+                            case erl_types:t_atom_vals(ATag) of
+                                [Tag] ->
+                                    io:format("qwe ~p~n", [Tag]),
+                                    {record, Tag};
+                                _ ->
+                                    erlang:error({internal_error, ?MODULE})
+                            end;
+                        false ->
+                            erlang:error({internal_error, ?MODULE})
+                    end;
+                _ ->
+                    io:format("qwe2 ~p~n", [erl_types:t_tuple_args(FType)]),
+                    {todo, FType}
+            end;
+        false ->
+            io:format("zxc ~p~n", [FType]),
+            {todo, FType}
+    end.
+
+get_json_type2(FType) ->
+    io:format("ttt ~p~n", [FType]),
+    case erl_types:t_is_tuple(FType) of
+        true ->
+            case erl_types:t_tuple_args(FType) of
+                [ATag] ->
+                    case erl_types:t_is_atom(ATag) of
+                        true ->
+                            case erl_types:t_atom_vals(ATag) of
+                                [Tag] ->
+                                    {record, Tag, erl_types:t_tuple_size(FType)};
+                                _ ->
+                                    erlang:error({internal_error, ?MODULE})
+                            end;
+                        false ->
+                            erlang:error({internal_error, ?MODULE})
+                    end;
+                Args ->
+                    io:format("tuple ~p~n", [{FType, Args}]),
+                    {tuple, lists:map(fun get_json_type2/1, Args)}
+            end;
+        false ->
+            case erl_types:t_is_atom(FType) of
+                true ->
+                    {atom, erl_types:t_atom_vals(FType)};
+                false ->
+                    case is_json_raw_type(FType) of
+                        {true, T} -> T;
+                        false ->
+                            case erl_types:t_is_list(FType) of
+                                true ->
+                                    {list, get_json_type2(erl_types:t_list_elements(FType))};
+                                false ->
+                                    Undefined = erl_types:t_atom(undefined),
+                                    case catch erl_types:t_elements(FType) of
+                                        [Undefined, T] ->
+                                            {option, get_json_type2(T), undefined};
+                                        [_, _ | _] ->
+                                            {todo, FType};
+                                        _ ->
+                                            case erl_types:t_is_any(FType) of
+                                                true ->
+                                                    {todo, FType};
+                                                false ->
+                                                    case FType of
+                                                        {type, _, list, [T]} ->
+                                                            {list, get_json_type2(T)};
+                                                        {remote_type, _,
+                                                         [{atom, _, erlang},
+                                                          {atom, _, timestamp}, []]} ->
+                                                            timestamp;
+                                                        {remote_type, _,
+                                                         [{atom, _, inet},
+                                                          {atom, _, ip_address}, []]} ->
+                                                            ip_address;
+                                                        {remote_type, _,
+                                                         [{atom, _, jid},
+                                                          {atom, _, jid}, []]} ->
+                                                            jid;
+                                                        {type, _, union, _} ->
+                                                            {todo, FType};
+                                                        _ ->
+                                                            erlang:error({internal_error, ?MODULE})
+                                                    end
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
+
+is_json_raw_type(Type) ->
+    case {erl_types:t_is_binary(Type),
+          erl_types:t_is_integer(Type),
+          erl_types:t_is_boolean(Type)} of
+        {true, _, _} -> {true, binary};
+        {_, true, _} -> {true, integer};
+        {_, _, true} -> {true, boolean};
+        _ -> false
+    end.
+
+json_use_enc_dec({dec_ip, []}) -> true;
+json_use_enc_dec({dec_host, []}) -> true;
+json_use_enc_dec({dec_host_port, []}) -> true;
+json_use_enc_dec(_) -> false.
+
+
 make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                   IsRequired, Default, DecMFA, _Types, ModName) ->
     FunName = make_dec_fun_name(Parents),
@@ -2057,7 +2620,10 @@ get_fun_return_type(Fun, FunSpecs) ->
     get_fun_return_type(Fun, FunSpecs, dict:new()).
 
 get_fun_return_type({dec_enum, [Atoms]}, _, _) ->
-    erl_types:t_atoms(Atoms);
+    %% TODO: erl_types:t_atoms restricts the number of atoms to 13, this is a
+    %% hack to allow any number of atoms
+    %erl_types:t_atoms(Atoms);
+    {c, atom, lists:usort(Atoms), unknown};
 get_fun_return_type({dec_int, [Min, _]}, _, _) ->
     if Min > 0 ->
             erl_types:t_pos_integer();
