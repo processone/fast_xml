@@ -418,7 +418,7 @@ write_module(ModName, ModName, AST, FunDeps, ErlDirName,
     TopDecoders = make_top_decoders(TaggedElems, ModName),
     TopEncoders = make_top_encoders(TaggedElems, ModName),
     Registrar = make_registrar(ModName),
-    Decoders = make_decoders(TaggedElems, ModName, ModName),
+    Decoders = make_decoders(TaggedElems, PredefRecords, ModName, ModName),
     Encoders = make_encoders(TaggedElems, ModName),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ModName),
     GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
@@ -441,7 +441,7 @@ write_module(ParentMod, ModName, AST, FunDeps, ErlDirName,
     Module = erl_syntax:attribute(
                ?AST(module),
                [erl_syntax:atom(ModName)]),
-    Decoders = make_decoders(TaggedElems, ParentMod, ModName),
+    Decoders = make_decoders(TaggedElems, PredefRecords, ParentMod, ModName),
     Encoders = make_encoders(TaggedElems, ModName),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ParentMod),
     GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
@@ -750,7 +750,7 @@ make_resolver(TaggedSpecs, ModName) ->
     [erl_syntax:function(?AST(get_mod), Clauses1),
      erl_syntax:function(?AST(get_mod), Clauses2)].
 
-make_top_decoders(_TaggedSpecs, ModName) ->
+make_top_decoders(TaggedSpecs, ModName) ->
     C0 = ?AST(XMLNS = get_attr(<<"xmlns">>, Attrs, TopXMLNS)),
     C1 = erl_syntax:case_expr(
 	   ?AST(get_mod(Name, XMLNS)),
@@ -773,9 +773,42 @@ make_top_decoders(_TaggedSpecs, ModName) ->
      make_function(
        "decode",
        [?AST({xmlel, Name, Attrs, _} = El), ?AST(TopXMLNS), ?AST(Opts)],
-       [C0, C1])].
+       [C0, C1])] ++
+        make_top_decoders_json(TaggedSpecs, ModName).
 
-make_decoders(TaggedSpecs1, ParentMod, ModName) ->
+make_top_decoders_json(TaggedSpecs, ModName) ->
+    ResolverMod = resolver_mod(ModName),
+    TagNSMods = lists:foldl(
+		  fun({_, #elem{xmlns = XMLNS, name = Name, module = Mod}}, Acc)
+			when is_list(XMLNS) ->
+			  lists:foldl(
+			    fun(NS, D) ->
+				    dict:store({Name, NS}, Mod, D)
+			    end, Acc, XMLNS);
+		     ({_, #elem{xmlns = XMLNS, name = Name, module = Mod}}, Acc) ->
+			  dict:store({Name, XMLNS}, Mod, Acc)
+		  end, dict:new(), TaggedSpecs),
+    RecordMods = lists:foldl(
+		   fun({_, #elem{result = Result, module = Mod}}, Acc) ->
+			   case term_is_record(Result) of
+			       true ->
+				   Key = {element(1, Result), tuple_size(Result)},
+				   dict:append(Key, Mod, Acc);
+			       false ->
+				   Acc
+			   end
+		   end, dict:new(), TaggedSpecs),
+    Clauses = dict:fold(
+                fun({RecName, _RecSize}, [Mod | _], Acc) ->
+                        BRecName = atom_to_binary(RecName, utf8),
+                        [erl_syntax:clause(
+                           [?AST(['?a(BRecName)', _] = El)],
+                           none,
+                           [?AST('?a(Mod)':do_decode_json(El))]) | Acc]
+                end, [], RecordMods),
+    [erl_syntax:function(?AST(decode_json), Clauses)].
+
+make_decoders(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
     TaggedSpecs = lists:flatmap(
 		    fun({Tag, #elem{xmlns = XMLNSs, module = Mod} = E})
 			  when Mod == ModName ->
@@ -814,7 +847,119 @@ make_decoders(TaggedSpecs1, ParentMod, ModName) ->
 		      lists:map(
 			fun({_, #elem{name = Name, xmlns = NS}}) ->
 				?AST({'?a(Name)', '?a(NS)'})
-			end, TaggedSpecs))])].
+			end, TaggedSpecs))])] ++
+        make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName).
+
+make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
+    TaggedSpecs =
+        dict:to_list(
+          lists:foldl(
+            fun({Tag, #elem{module = Mod} = E}, Acc)
+               when Mod == ModName ->
+                    Result = E#elem.result,
+                    case term_is_record(Result) of
+                        true ->
+                            RecName = element(1, Result),
+                            Append =
+                                case dict:find(RecName, Acc) of
+                                    {ok, [{_, #elem{result = Result}}]} ->
+                                        case lists:keyfind(
+                                               <<"xmlns">>, #attr.name,
+                                               E#elem.attrs) of
+                                            #attr{} ->
+                                                true;
+                                            _ ->
+                                                false
+                                        end;
+                                    _ ->
+                                        true
+                                end,
+                            case Append of
+                                false ->
+                                    Acc;
+                                true ->
+                                    dict:append(RecName, {Tag, E}, Acc)
+                            end;
+                        false ->
+                            Acc
+                    end;
+               (_, Acc) ->
+                    Acc
+            end, dict:new(), TaggedSpecs1)),
+    NilClause = [erl_syntax:clause(
+		   [?AST([Name, _])],
+		   none,
+		   [?AST(erlang:error(
+			    {'?a(ParentMod)', {unknown_tag, Name}}))])],
+    Clauses =
+        lists:map(
+          fun({RecName, [{Tag, #elem{}}]}) ->
+                  BRecName = atom_to_binary(RecName, utf8),
+                  erl_syntax:clause(
+                    [?AST(['?a(BRecName)', _] = El)],
+                    none,
+                    [make_function_call(
+                       make_dec_fun_name([Tag, json]),
+                       [?AST(El)])]);
+             ({RecName, [{_, El1} | _] = TEs}) ->
+                  BRecName = atom_to_binary(RecName, utf8),
+		  XMLNSLabel = case lists:keyfind(<<"xmlns">>, #attr.name,
+                                                  El1#elem.attrs) of
+				   #attr{label = L, name = N} ->
+				       prepare_label(L, N);
+				   _ ->
+				       undefined
+			       end,
+                  TagField =
+                      case size(El1#elem.result) of
+                          2 ->
+                              ?AST(_Rec);
+                          _ ->
+                              case XMLNSLabel of
+                                  undefined ->
+                                      {ok, RecFields} =
+                                          dict:find(RecName, PredefRecords),
+                                      {FName, _, _} = lists:nth(1, RecFields),
+                                      FBName = atom_to_binary(FName, utf8),
+                                      ?AST(proplists:get_value(
+                                             '?a(FBName)',
+                                             element(1, _Rec)));
+                                  _ ->
+                                      BXMLNSLabel = atom_to_binary(
+                                                      label_to_record_field(
+                                                        XMLNSLabel), utf8),
+                                      ?AST(proplists:get_value(
+                                             '?a(BXMLNSLabel)',
+                                             element(1, _Rec)))
+                              end
+                      end,
+                  Cs = lists:map(
+                         fun({Tag, El}) when XMLNSLabel == undefined ->
+                                 Atom = element(2, El#elem.result),
+                                 false = is_label(Atom),
+                                 BAtom = atom_to_binary(Atom, utf8),
+                                 erl_syntax:clause(
+                                   [?AST('?a(BAtom)')],
+                                   none,
+                                   [make_function_call(
+                                      make_dec_fun_name([Tag, json]),
+                                      [?AST(El)])]);
+                            ({Tag, El}) ->
+                                 XMLNS = El#elem.xmlns,
+                                 erl_syntax:clause(
+                                   [?AST('?a(XMLNS)')],
+                                   none,
+                                   [make_function_call(
+                                      make_dec_fun_name([Tag, json]),
+                                      [?AST(El)])])
+                         end, TEs),
+                  erl_syntax:clause(
+                    [?AST(['?a(BRecName)', _Rec] = El)],
+                    none,
+                    [erl_syntax:case_expr(TagField, Cs)])
+          end, TaggedSpecs),
+    [erl_syntax:function(erl_syntax:atom(do_decode_json),
+                         Clauses ++ NilClause)].
 
 make_top_encoders(_TaggedSpecs, _ModName) ->
     Clause1 = erl_syntax:clause(
@@ -1147,10 +1292,12 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
         end,
     DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types,
 			       ModName, PredefRecords, Opts),
+    DecJsonAST = make_elem_dec_fun_json(Elem, Tag, AllElems, Types,
+                                        ModName, FunSpecs, PredefRecords, Opts),
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems, ModName),
     EncJsonAST = make_elem_enc_fun_json(Elem, Tag, AllElems, ModName,
                                         Types, FunSpecs, PredefRecords, Opts),
-    DecAST ++ EncAST ++ EncJsonAST ++ AttrAST ++ CDataAST.
+    DecAST ++ DecJsonAST ++ EncAST ++ EncJsonAST ++ AttrAST ++ CDataAST.
 
 %% Replace in `Term' every label found in `Labels'
 %% with the corresponding value.
@@ -1729,6 +1876,271 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
                 DefaultClause ++ Clauses)
       end, group_refs(Elem#elem.refs)).
 
+make_elem_dec_fun_json(
+  #elem{name = Name, result = Result, refs = Refs, module = Mod,
+        cdata = CData, attrs = Attrs, xmlns = XMLNS,
+        ignore_els = IgnoreEls} = Elem,
+  Tag, AllElems, Types, ModName, FunTypes, PredefRecords, Opts) ->
+    {_Tags, RecTypes, _RecDict} = Types,
+    case term_is_record(Result) of
+        true ->
+            ResultWithVars = subst_labels(Result, PredefRecords),
+            [RecName | RecLabels] = tuple_to_list(Result),
+            BRecName = atom_to_binary(RecName, utf8),
+            RecLabels2 =
+                lists:filter(
+                  fun(Label) ->
+                          case is_atom(Label) andalso is_label(Label) of
+                              true ->
+                                  JSONType = get_label_json_type(
+                                               Label, Elem, RecTypes,
+                                               FunTypes, AllElems, Opts),
+                                  case JSONType of
+                                      ignore ->
+                                          false;
+                                      _ ->
+                                          true
+                                  end;
+                              false ->
+                                  false
+                          end
+                  end, RecLabels),
+            case RecLabels of
+                [Label] ->
+                    Res =
+                        case is_label(Label) of
+                            true ->
+                                JSONType = get_label_json_type(
+                                             Label, Elem, RecTypes,
+                                             FunTypes, AllElems, Opts),
+                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                decode_json_field2(
+                                  JSONType, ?AST(_value),
+                                  Elem#elem.module, ModName);
+                            false ->
+                                BLabel = atom_to_binary(Label, utf8),
+                                ?AST('?a(BLabel)')
+                        end,
+                    [erl_syntax:function(
+                       erl_syntax:atom(make_dec_fun_name([Tag, json])),
+                       [erl_syntax:clause(
+                          [?AST(['?a(BRecName)', _value])],
+                          none,
+                          [?AST({'?a(RecName)', '?Res'})]
+                         )])];
+                 _ ->
+                    case RecLabels2 of
+                        [] ->
+                            [erl_syntax:function(
+                               erl_syntax:atom(make_dec_fun_name([Tag, json])),
+                               [erl_syntax:clause(
+                                  [?AST(['?a(BRecName)', {_fields}])],
+                                  none,
+                                  [ResultWithVars]
+                                 )])];
+                        _ ->
+                            DecCall = make_function_call(
+                                        make_dec_fun_name([fields, Tag, json]),
+                                        [?AST(_fields)|
+                                         lists:map(
+                                           fun(_) ->
+                                                   ?AST(undefined)
+                                           end, RecLabels2)]),
+                            DecTuple =
+                                tuple_or_single_var(
+                                  lists:map(fun label_to_var/1, RecLabels2)),
+                            [erl_syntax:function(
+                               erl_syntax:atom(make_dec_fun_name([Tag, json])),
+                               [erl_syntax:clause(
+                                  [?AST(['?a(BRecName)', {_fields}])],
+                                  none,
+                                  [?AST('?DecTuple' = '?DecCall')] ++
+                                  [ResultWithVars]
+                                 )])]
+                                ++ make_json_fields_dec_fun(
+                                     make_dec_fun_name([fields, Tag, json]),
+                                     RecLabels2, Tag,
+                                     Elem, RecTypes, FunTypes, AllElems,
+                                     Opts, ModName)
+                    end
+            end;
+        false when is_tuple(Result) ->
+            RecLabels = tuple_to_list(Result),
+            Res = lists:map(
+                    fun(Label) ->
+                            Var = label_to_var(Label),
+                            JSONType = get_label_json_type(
+                                         Label, Elem, RecTypes,
+                                         FunTypes, AllElems, Opts),
+                            decode_json_field(
+                              JSONType, Label, Var,
+                              Elem#elem.module, ModName)
+                    end, RecLabels),
+            [erl_syntax:function(
+               erl_syntax:atom(make_dec_fun_name([Tag, json])),
+               [erl_syntax:clause(
+                  [erl_syntax:list(lists:map(fun label_to_var/1, RecLabels))],
+                  none,
+                  [erl_syntax:tuple(Res)]
+                 )])];
+        false when is_atom(Result) ->
+io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
+            Label = Result,
+            Res =
+                case is_label(Label) of
+                    true ->
+                        JSONType = get_label_json_type(
+                                     Label, Elem, RecTypes,
+                                     FunTypes, AllElems, Opts),
+                        io:format("ref ~p~n", [{Label, JSONType}]),
+                        VLabel = label_to_var(Label),
+                        encode_json_field2(
+                          JSONType, ?AST(_val),
+                          Elem#elem.module, ModName);
+                    false ->
+                        BLabel = atom_to_binary(Label, utf8),
+                        ?AST('?a(BLabel)')
+                end,
+            [erl_syntax:function(
+               erl_syntax:atom(make_dec_fun_name([Tag, json])),
+               [erl_syntax:clause(
+                  [?AST(_val)],
+                  none,
+                  [Res]
+                 )])];
+        false ->
+io:format("refs2 ~p~n", [{Tag, Refs, Result}]),
+            []
+    end.
+%    FunName = make_dec_fun_name([Tag, json]),
+%    ResultWithVars = subst_labels(Result, PredefRecords),
+%    AttrVars = lists:map(
+%                 fun(#attr{name = AttrName, label = AttrLabel}) ->
+%                         label_to_var(prepare_label(AttrLabel, AttrName))
+%                 end, Attrs),
+%    HaveCData = have_label(Result, CData#cdata.label),
+%    CDataVars = if HaveCData ->
+%                        [label_to_var(CData#cdata.label)];
+%                   true ->
+%                        []
+%                end,
+%    SubElVars = case have_label(Result, '$_els') of
+%                    true ->
+%                        [label_to_var('$_els')];
+%                    false ->
+%                        []
+%                end,
+%    ElemVars = lists:map(
+%                 fun({Label, _}) ->
+%                         label_to_var(Label)
+%                 end, group_refs(Refs)),
+%    AttrMatch =
+%        if AttrVars /= [] ->
+%                AttrPattern = tuple_or_single_var(AttrVars),
+%                AttrCall = make_function_call(
+%                             FunName ++ "_attrs",
+%                             [?AST(__TopXMLNS),
+%			      ?AST(_attrs)|
+%                              lists:map(
+%                                fun(_) ->
+%                                        ?AST(undefined)
+%                                end, Attrs)]),
+%                [erl_syntax:match_expr(AttrPattern, AttrCall)];
+%           true ->
+%                []
+%        end,
+%    ElCDataMatch =
+%        case CDataVars ++ ElemVars ++ SubElVars of
+%            [] ->
+%                [];
+%            _ ->
+%                [erl_syntax:match_expr(
+%                   tuple_or_single_var(CDataVars ++ ElemVars ++ SubElVars),
+%                   make_function_call(
+%                     FunName ++ "_els",
+%                     [?AST(__TopXMLNS),
+%		      ?AST(__Opts),
+%		      ?AST(_els)|
+%                      lists:flatmap(
+%                        fun({_, [#ref{min = 0, max = 1, default = Def}|_]}) ->
+%                                [abstract(Def)];
+%                           ({_, [#ref{min = 1, max = 1}|_]}) ->
+%                                [?AST(error)];
+%                           (#cdata{}) when HaveCData ->
+%                                [?AST(<<>>)];
+%                           (#cdata{}) ->
+%                                [];
+%                           (_) ->
+%                                [?AST([])]
+%                        end, [CData|group_refs(Refs)] ++ SubElVars)]))]
+%        end,
+%    [make_function(
+%       FunName,
+%       [?AST(__TopXMLNS),
+%	?AST(__Opts),
+%	?AST({xmlel, '?a(Name)', _attrs, _els})],
+%       ElCDataMatch ++ AttrMatch ++ [ResultWithVars])].
+%        ++ make_els_dec_fun(Mod, FunName ++ "_els", CData, HaveCData, SubElVars,
+%                            Refs, Tag, XMLNS, AllElems,
+%                            Result, Types, ModName, IgnoreEls, Opts)
+%        ++ make_attrs_dec_fun(FunName ++ "_attrs", Attrs, Tag).
+
+make_json_fields_dec_fun(FunName, Attrs, Tag,
+                         Elem, RecTypes, FunTypes, AllElems, Opts, ModName) ->
+    AttrVars = lists:map(fun label_to_var/1, Attrs),
+    Clauses =
+        lists:map(
+          fun(Label) ->
+                  FName = label_to_record_field(Label),
+                  FBName = atom_to_binary(FName, utf8),
+                  Var = label_to_var(Label),
+                  Pattern = [?AST([{'?a(FBName)', _val} | _fields]) |
+                             lists:map(
+                               fun(V) when V == Var ->
+                                       VName = erl_syntax:variable_literal(V),
+                                       erl_syntax:variable("_" ++ VName);
+                                  (V) ->
+                                       V
+                               end, AttrVars)],
+                  Body = [make_function_call(
+                            FunName,
+                            [?AST(_fields) |
+                             lists:map(
+                               fun(V) when V == Var ->
+                                       ?AST(_val);
+                                  (V) ->
+                                       V
+                               end, AttrVars)])],
+                  erl_syntax:clause(Pattern, none, Body)
+          end, Attrs),
+    if Clauses /= [] ->
+            PassClause = erl_syntax:clause(
+                           [?AST([_ | _fields]) | AttrVars],
+                           none,
+                           [make_function_call(
+                              FunName,
+                              [?AST(_fields) | AttrVars])]),
+            Result = lists:map(
+                       fun(Label) ->
+                               Var = label_to_var(Label),
+                               JSONType = get_label_json_type(
+                                            Label, Elem, RecTypes,
+                                            FunTypes, AllElems, Opts),
+                               decode_json_field(
+                                 JSONType, Label, Var,
+                                 Elem#elem.module, ModName)
+                       end, Attrs),
+            NilClause = erl_syntax:clause(
+                          [?AST([]) | AttrVars],
+                          none,
+                          [tuple_or_single_var(Result)]),
+            [erl_syntax:function(
+               erl_syntax:atom(FunName),
+               Clauses ++ [PassClause, NilClause])];
+       true ->
+            []
+    end.
+
 make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                         name = ElemName, xmlns = XMLNS,
                         cdata = CData, refs = Refs} = Elem,
@@ -1826,6 +2238,7 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
         true ->
             {_Tags, RecTypes, _RecDict} = Types,
             [RecName | RecLabels] = tuple_to_list(Result),
+            BRecName = atom_to_binary(RecName, utf8),
             ConvertLabelFun =
                 fun(Label, {K, ASTs}) ->
                         InVar = erl_syntax:variable(
@@ -1836,8 +2249,6 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                             true ->
                                 FName = label_to_record_field(Label),
                                 FBName = atom_to_binary(FName, utf8),
-                                                %{FType, Default, IsRequired} = get_label_type(Label, Elem, RecTypes, FunTypes, Opts),
-                                                %JSONType = get_json_type(FType, Default, IsRequired, RecTypes),
                                 JSONType = get_label_json_type(
                                              Label, Elem, RecTypes,
                                              FunTypes, AllElems, Opts),
@@ -1860,27 +2271,52 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                                 {K + 1, [Assign | ASTs]}
                         end
                 end,
-            {K, MakeJSON} =
-                lists:foldl(ConvertLabelFun, {0, []}, lists:reverse(RecLabels)),
-            RecFieldsJSON = erl_syntax:variable("_fields" ++ integer_to_list(K)),
+            case RecLabels of
+                [Label] ->
+                    Res =
+                        case is_label(Label) of
+                            true ->
+                                JSONType = get_label_json_type(
+                                             Label, Elem, RecTypes,
+                                             FunTypes, AllElems, Opts),
+                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                VLabel = label_to_var(Label),
+                                encode_json_field2(
+                                  JSONType, ?AST(_val),
+                                  Elem#elem.module, ModName);
+                            false ->
+                                BLabel = atom_to_binary(Label, utf8),
+                                ?AST('?a(BLabel)')
+                        end,
+                    [erl_syntax:function(
+                       erl_syntax:atom(make_enc_fun_name([Tag, json])),
+                       [erl_syntax:clause(
+                          [?AST({'?a(RecName)', _val})],
+                          none,
+                          [?AST(['?a(BRecName)', '?Res'])]
+                         )])];
+                _ ->
+                    {K, MakeJSON} =
+                        lists:foldl(ConvertLabelFun, {0, []}, lists:reverse(RecLabels)),
+                    RecFieldsJSON = erl_syntax:variable("_fields" ++ integer_to_list(K)),
                                                 %RecFieldsJSON =
                                                 %    erl_syntax:list(
                                                 %      lists:map(ConvertLabelFun, RecLabels)),
-            RecJSON =
-                erl_syntax:tuple(
-                  [RecFieldsJSON]),
-            BRecName = atom_to_binary(RecName, utf8),
-            JSON = erl_syntax:list(
-                     [?AST('?a(BRecName)'), RecJSON]),
-            [erl_syntax:function(
-               erl_syntax:atom(make_enc_fun_name([Tag, json])),
-               [erl_syntax:clause(
-                  [subst_labels(Result)],
-                  none,
-                  [?AST(_fields0 = [])] ++
-                  lists:reverse(MakeJSON) ++
-                  [JSON]
-                 )])];
+                    RecJSON =
+                        erl_syntax:tuple(
+                          [RecFieldsJSON]),
+                    JSON = erl_syntax:list(
+                             [?AST('?a(BRecName)'), RecJSON]),
+                    [erl_syntax:function(
+                       erl_syntax:atom(make_enc_fun_name([Tag, json])),
+                       [erl_syntax:clause(
+                          [subst_labels(Result)],
+                          none,
+                          [?AST(_fields0 = [])] ++
+                          lists:reverse(MakeJSON) ++
+                          [JSON]
+                         )])]
+            end;
         false when is_tuple(Result) ->
             {_Tags, RecTypes, _RecDict} = Types,
             RecLabels = tuple_to_list(Result),
@@ -1999,13 +2435,6 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
                 undefined ->
                     InVar
             end;
-        %{undefined, SubType} ->
-        %    Res = encode_json_field(SubType, Label, InVar, FBName, ModName),
-        %    ?AST(case '?VLabel' of
-        %             undefined -> '?InVar';
-        %             _ -> '?Res'
-        %         end
-        %        );
         {external, _, RefMod, RefTag} ->
             io:format("ext ~p~n", [Type]),
             make_function_call(
@@ -2033,8 +2462,8 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
             ?AST(fun('?Pattern') ->
                          '?Tuple'
                  end('?InVar'));
-        timestamp ->
-            ?AST(tuple_to_list('?InVar'));
+        %timestamp ->
+        %    ?AST(tuple_to_list('?InVar'));
         ip_address ->
             ?AST(enc_ip('?InVar'));
         jid ->
@@ -2114,6 +2543,150 @@ encode_json_case(Types, InVar, ModName, TopModName) ->
                         ]
                        ),
                   Res = encode_json_field2(Rec, InVar, ModName, TopModName),
+                  erl_syntax:clause(
+                    [Pattern],
+                    none,
+                    [Res])
+          end, maps:to_list(TMap)),
+    erl_syntax:case_expr(InVar, Clauses).
+
+decode_json_field(Type, Label, InVar, ModName, TopModName) ->
+    case Type of
+        ignore ->
+            erlang:error({internal_error, ?MODULE});
+        {option, SubType, Default} ->
+            Res = decode_json_field2(SubType, InVar, ModName, TopModName),
+            ?AST(case '?InVar' of
+                     undefined -> '?a(Default)';
+                     _ -> '?Res'
+                 end
+                );
+        _ ->
+            decode_json_field2(Type, InVar, ModName, TopModName)
+    end.
+
+decode_json_field2(Type, InVar, ModName, TopModName) ->
+    case Type of
+        [T] ->
+            decode_json_field2(T, InVar, ModName, TopModName);
+        binary -> InVar;
+        integer -> InVar;
+        boolean -> InVar;
+        {binary, DecFun, _EncFun} ->
+            case DecFun of
+                {M, F, Args} ->
+                    make_function_call(
+                      {M, F},
+                      [InVar |
+                       [abstract(Arg) || Arg <- Args]]);
+                {F, Args} ->
+                    make_function_call(
+                      F,
+                      [InVar |
+                       [abstract(Arg) || Arg <- Args]]);
+                undefined ->
+                    InVar
+            end;
+        {external, _, RefMod, RefTag} ->
+            io:format("ext ~p~n", [Type]),
+            make_function_call(
+              make_dec_fun_name(ModName, RefMod, [RefTag, json]),
+              [InVar]);
+        {list, T} ->
+            Res = decode_json_field2(T, ?AST(_X), ModName, TopModName),
+            ?AST(lists:map(fun(_X) -> '?Res' end, '?InVar'));
+        {tuple, Args} ->
+            Pattern =
+                erl_syntax:list(
+                  lists:map(
+                    fun(I) ->
+                            erl_syntax:variable("_X" ++ integer_to_list(I))
+                    end, lists:seq(1, length(Args)))),
+            Tuple =
+                erl_syntax:tuple(
+                  lists:map(
+                    fun(I) ->
+                            Var = erl_syntax:variable(
+                                    "_X" ++ integer_to_list(I)),
+                            decode_json_field2(lists:nth(I, Args), Var,
+                                               ModName, TopModName)
+                    end, lists:seq(1, length(Args)))),
+            ?AST(fun('?Pattern') ->
+                         '?Tuple'
+                 end('?InVar'));
+        ip_address ->
+            ?AST(dec_ip('?InVar'));
+        jid ->
+            ?AST(fun({_jid}) ->
+                         case jid:make(proplists:get_value(<<"user">>, _jid, <<>>),
+                                       proplists:get_value(<<"server">>, _jid),
+                                       proplists:get_value(<<"resource">>, _jid, <<>>)) of
+                             error -> erlang:error({bad_jid, _jid});
+                             _JID -> _JID
+                         end
+                 end('?InVar'));
+        {atom, unknown} ->
+            io:format("asd ~p~n", [Type]),
+            InVar;
+        {atom, _} ->
+            decode_json_case([Type], InVar, ModName, TopModName);
+        Types when is_list(Types) ->
+            decode_json_case(Types, InVar, ModName, TopModName);
+        {option, SubType, Default} ->
+            Res = decode_json_field2(SubType, ?AST(_val), ModName, TopModName),
+            ?AST(fun(<<"None">>) -> '?a(Default)';
+                    ([<<"Some">>, _val]) -> '?Res'
+                 end('?InVar')
+                );
+        els ->
+            erl_syntax:list_comp(
+              ?AST('?a(TopModName)':decode_json(_el)),
+              [erl_syntax:generator(?AST(_el), InVar)]);
+        _ ->
+            io:format("asd ~p~n", [Type]),
+            InVar
+    end.
+
+decode_json_case(Types, InVar, ModName, TopModName) ->
+    io:format("cases' ~p~n", [Types]),
+    TMap =
+        lists:foldl(
+          fun({atom, Atoms}, Map) ->
+                  lists:foldl(
+                    fun(Atom, Acc) ->
+                            case maps:find(Atom, Acc) of
+                                {ok, atom} ->
+                                    Acc;
+                                {ok, T} ->
+                                    erlang:error({conflicting_types,
+                                                  {atom, Acc}, T});
+                                error ->
+                                    maps:put(Atom, atom, Acc)
+                            end
+                    end, Map, Atoms);
+             ({external, {record, Tag, _}, _, _} = Rec, Map) ->
+                  case maps:find(Tag, Map) of
+                      {ok, Rec} ->
+                          Map;
+                      {ok, T} ->
+                          erlang:error({conflicting_types, Rec, T});
+                      error ->
+                          maps:put(Tag, Rec, Map)
+                  end
+          end, maps:new(), Types),
+    io:format("cases ~p~n", [TMap]),
+    Clauses =
+        lists:map(
+          fun({Atom, atom}) ->
+                  BAtom = atom_to_binary(Atom, utf8),
+                  erl_syntax:clause(
+                    [?AST('?a(BAtom)')],
+                    none,
+                    [?AST('?a(Atom)')]);
+             ({Tag, {external, {record, Tag, Arity}, _, _} = Rec}) ->
+                  BTag = atom_to_binary(Tag, utf8),
+                  Pattern = ?AST(['?a(BTag)', _]),
+                  Res = decode_json_field2(Rec, InVar, ModName, TopModName),
                   erl_syntax:clause(
                     [Pattern],
                     none,
@@ -2310,7 +2883,10 @@ get_json_type2(FType) ->
                                                         {remote_type, _,
                                                          [{atom, _, erlang},
                                                           {atom, _, timestamp}, []]} ->
-                                                            timestamp;
+                                                            {tuple,
+                                                             [integer,
+                                                              integer,
+                                                              integer]};
                                                         {remote_type, _,
                                                          [{atom, _, inet},
                                                           {atom, _, ip_address}, []]} ->
