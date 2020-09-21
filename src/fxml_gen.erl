@@ -799,6 +799,7 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
     [string:join(Strings, io_lib:nl() ++ io_lib:nl()), io_lib:nl(),
      "type xmpp_element = [", io_lib:nl(),
      "  | XmlString of string", io_lib:nl(),
+     "  | StreamEnd", io_lib:nl(),
      ATDRecords,
      "]"
     ].
@@ -824,7 +825,7 @@ record_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
     RecFields = lists:reverse(RevRecFields),
     case lists:zip(RecFields, Types) of
         [{_FName, JSONType}] ->
-            ["type ", sanitize_for_atd(RecName), " = ",
+            ["type ", to_atd_var(RecName), " = ",
              json_type_to_atd(JSONType)];
         RecFieldsTypes ->
             Fs = lists:flatmap(
@@ -862,7 +863,7 @@ record_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
                    end, RecFieldsTypes),
             case Fs of
                 [] ->
-                    ["type ", sanitize_for_atd(RecName), " = unit"];
+                    ["type ", to_atd_var(RecName), " = unit"];
                 _ ->
                     RecordStr = [Prefix, string:join(Fs, Sep), io_lib:nl() ++ "}"],
                     [RecordStr, io_lib:nl()]
@@ -959,13 +960,12 @@ atd_header(FileName) ->
      io_lib:nl(),
      "type jid = {user : string; server : string; resource : string; ",
      "~luser : string; ~lserver : string; ~lresource : string}", io_lib:nl(),
-     io_lib:nl(),
-     "type els = xmpp_element list", io_lib:nl(),
      io_lib:nl()].
 
 atd_value_to_string(<<>>) -> "\\\"\\\"";
 atd_value_to_string(true) -> "true";
-atd_value_to_string(false) -> "false".
+atd_value_to_string(false) -> "false";
+atd_value_to_string([]) -> "[| |]".
 
 
 make_registrar(ModName) ->
@@ -2602,13 +2602,31 @@ encode_json_field(Type, Label, InVar, FBName, ModName, TopModName) ->
     case Type of
         ignore ->
             InVar;
-        {option, SubType, Default} ->
+        _ ->
+            {SubType, Default, UseDefault} =
+                case Type of
+                    {option, SubT, Def} ->
+                        {SubT, Def, true};
+                    {list, _} ->
+                        {Type, [], true};
+                    binary ->
+                        {Type, <<>>, true};
+                    {binary, _, _} ->
+                        {Type, <<>>, true};
+                    _ ->
+                        {Type, undefined, false}
+                end,
             Res = encode_json_field2(SubType, VLabel, ModName, TopModName),
-            ?AST(case '?VLabel' of
-                     '?a(Default)' -> '?InVar';
-                     _ -> [{'?a(FBName)', '?Res'} | '?InVar']
-                 end
-                );
+            case UseDefault of
+                true ->
+                    ?AST(case '?VLabel' of
+                             '?a(Default)' -> '?InVar';
+                             _ -> [{'?a(FBName)', '?Res'} | '?InVar']
+                         end
+                        );
+                false ->
+                    ?AST([{'?a(FBName)', '?Res'} | '?InVar'])
+            end;
         _ ->
             Res = encode_json_field2(Type, VLabel, ModName, TopModName),
             ?AST([{'?a(FBName)', '?Res'} | '?InVar'])
@@ -2684,7 +2702,8 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
             encode_json_case([Type], InVar, ModName, TopModName);
         Types when is_list(Types) ->
             encode_json_case(Types, InVar, ModName, TopModName);
-        {option, SubType, Default} when is_atom(Default) ->
+        {option, SubType, Default} when is_atom(Default),
+                                        Default /= false ->
             Res = encode_json_field2(SubType, InVar, ModName, TopModName),
             ?AST(case '?InVar' of
                      '?a(Default)' -> <<"None">>;
@@ -2693,10 +2712,8 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
                 );
         {option, SubType, _Default} ->
             encode_json_field2(SubType, InVar, ModName, TopModName);
-        els ->
-            erl_syntax:list_comp(
-              ?AST('?a(TopModName)':encode_json(_el)),
-              [erl_syntax:generator(?AST(_el), InVar)]);
+        xmpp_element ->
+              ?AST('?a(TopModName)':encode_json('?InVar'));
         _ ->
             io:format("asd ~p~n", [Type]),
             InVar
@@ -2757,13 +2774,33 @@ decode_json_field(Type, Label, InVar, ModName, TopModName) ->
     case Type of
         ignore ->
             erlang:error({internal_error, ?MODULE});
-        {option, SubType, Default} ->
+        _ ->
+            {SubType, Default, UseDefault} =
+                case Type of
+                    {option, SubT, Def} ->
+                        {SubT, ?AST('?a(Def)'), true};
+                    {list, _} ->
+                        {Type, ?AST([]), true};
+                    binary ->
+                        {Type, ?AST(<<>>), true};
+                    {binary, _, _} ->
+                        Dec = decode_json_field2(Type, ?AST(<<>>),
+                                                 ModName, TopModName),
+                        {Type, Dec, true};
+                    _ ->
+                        {Type, undefined, false}
+                end,
             Res = decode_json_field2(SubType, InVar, ModName, TopModName),
-            ?AST(case '?InVar' of
-                     undefined -> '?a(Default)';
-                     _ -> '?Res'
-                 end
-                );
+            case UseDefault of
+                true ->
+                    ?AST(case '?InVar' of
+                             undefined -> '?Default';
+                             _ -> '?Res'
+                         end
+                        );
+                false ->
+                    Res
+            end;
         _ ->
             decode_json_field2(Type, InVar, ModName, TopModName)
     end.
@@ -2835,7 +2872,8 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
             decode_json_case([Type], InVar, ModName, TopModName);
         Types when is_list(Types) ->
             decode_json_case(Types, InVar, ModName, TopModName);
-        {option, SubType, Default} when is_atom(Default) ->
+        {option, SubType, Default} when is_atom(Default),
+                                        Default /= false ->
             Res = decode_json_field2(SubType, ?AST(_val1), ModName, TopModName),
             ?AST(fun(<<"None">>) -> '?a(Default)';
                     ([<<"Some">>, _val1]) -> '?Res'
@@ -2843,10 +2881,8 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
                 );
         {option, SubType, _Default} ->
             decode_json_field2(SubType, InVar, ModName, TopModName);
-        els ->
-            erl_syntax:list_comp(
-              ?AST('?a(TopModName)':decode_json(_el)),
-              [erl_syntax:generator(?AST(_el), InVar)]);
+        xmpp_element ->
+            ?AST('?a(TopModName)':decode_json('?InVar'));
         _ ->
             io:format("asd ~p~n", [Type]),
             InVar
@@ -2902,17 +2938,7 @@ decode_json_case(Types, InVar, ModName, TopModName) ->
 get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems, Opts) ->
     case get_spec_by_label(Label, Elem) of
         sub_els ->
-            %XMLType = t_remote(fxml, xmlel),
-	    %T = case proplists:get_value(add_type_specs, Opts) of
-	    %        SpecName when is_atom(SpecName), SpecName /= undefined ->
-            %            io:format("sub_els1 ~p~n", [{SpecName, Opts}]),
-	    %    	erl_types:t_sup([XMLType, t_identifier(SpecName)]);
-	    %        _ ->
-            %            io:format("sub_els2 ~p~n", [Label]),
-	    %    	erl_types:t_any()
-	    %    end,
-            %{todo, erl_types:t_list(T), [], false};
-            els;
+            {list, xmpp_element};
 	'_' ->
 	    ignore;
 	#attr{dec = undefined, default = Default,
@@ -2982,10 +3008,10 @@ get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems, Opts) ->
             end,
             IsRequired = (Min == 1) and (Max == 1),
             case {Default, IsRequired, Max} of
-                {undefined, false, 1} ->
-                    {option, Types, Default};
                 {false, false, 1} when Types == [{atom,[true]}] ->
                     {option, boolean, Default};
+                {_, false, 1} ->
+                    {option, Types, Default};
                 {_, _, 1} ->
                     Types;
                 _ ->
@@ -3037,7 +3063,14 @@ get_json_type2(FType) ->
         false ->
             case erl_types:t_is_atom(FType) of
                 true ->
-                    {atom, erl_types:t_atom_vals(FType)};
+                    Atoms = erl_types:t_atom_vals(FType),
+                    case lists:member(undefined, Atoms) of
+                        false ->
+                            {atom, Atoms};
+                        true ->
+                            {option, {atom, lists:delete(undefined, Atoms)},
+                             undefined}
+                    end;
                 false ->
                     case is_json_raw_type(FType) of
                         {true, T} -> T;
@@ -3117,11 +3150,11 @@ json_type_to_atd(Type) ->
         {external, {record, Tag, _}, _RefMod, _RefTag} ->
             sanitize_for_atd(Tag);
         {external, {list, {record, Tag, _}}, _RefMod, _RefTag} ->
-            [sanitize_for_atd(Tag), " list"];
+            [sanitize_for_atd(Tag), " list <ocaml repr=\"array\">"];
         {external, _, _RefMod, RefTag} ->
             sanitize_for_atd(RefTag);
         {list, T} ->
-            [json_type_to_atd(T), " list"];
+            [json_type_to_atd(T), " list <ocaml repr=\"array\">"];
         {tuple, Args} ->
             ["(",
              string:join(lists:map(fun json_type_to_atd/1, Args), " * "),
@@ -3134,9 +3167,12 @@ json_type_to_atd(Type) ->
             json_case_to_atd([Type]);
         Types when is_list(Types) ->
             json_case_to_atd(Types);
-        {option, SubType, _Default} ->
+        {option, SubType, Default} when is_atom(Default),
+                                        Default /= false ->
             [json_type_to_atd(SubType), " option"];
-        els -> "els"
+        {option, SubType, _Default} ->
+            json_type_to_atd(SubType);
+        xmpp_element -> "xmpp_element"
     end.
 
 json_case_to_atd(Types) ->
