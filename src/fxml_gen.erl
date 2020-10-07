@@ -396,8 +396,8 @@ compile(TaggedElems0, Forms, Path, Opts) ->
                         true ->
                             io:format("Generating ~s~n", [ModNameATD]),
                             ATDRecords =
-                                make_atd_records(Types, TaggedElems, PredefRecords,
-                                                 FunSpecs, Opts),
+                                make_atd_records(Types, TaggedElems,
+                                                 PredefRecords, FunSpecs),
                             file:write_file(
                               filename:join([HrlDirName, ModNameATD]),
                               [atd_header(FileName),
@@ -713,7 +713,7 @@ header(FileName) ->
       ["% Created automatically by XML generator (fxml_gen.erl)",
        "% Source: " ++ FileName]).
 
-make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict, Opts) ->
+make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict) ->
     RecTypes =
         lists:foldl(
           fun(Tag, Types) ->
@@ -723,8 +723,8 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
                       true ->
                           {RecName, Ts} =
                               record_to_atd_types(
-                                RefElem, RecDict, TaggedElems,
-                                TypesDict, FunDict, Opts),
+                                RefElem, TaggedElems,
+                                TypesDict, FunDict),
                           case maps:find(RecName, Types) of
                               {ok, Ts2} ->
                                   %% TODO
@@ -738,7 +738,6 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
                           Types
                   end
           end, maps:new(), Tags),
-    io:format("atd2 ~p~n", [RecTypes]),
     {Strings, _} =
         lists:foldl(
           fun(Tag, {Res, Seen}) ->
@@ -751,9 +750,7 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
                               false ->
                                   Types = maps:get(RecName, RecTypes),
                                   {[record_to_atd_string(
-                                      RefElem, RecDict, TaggedElems,
-                                      TypesDict, FunDict, Opts, Types,
-                                      PredefRecords) | Res],
+                                      RefElem, Types, PredefRecords) | Res],
                                    [RecName|Seen]};
                               true ->
                                   {Res, Seen}
@@ -765,7 +762,7 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
                                   true ->
                                       JSONType = get_label_json_type(
                                                    Label, RefElem, TypesDict,
-                                                   FunDict, TaggedElems, Opts),
+                                                   FunDict, TaggedElems),
                                       T =
                                           case JSONType of
                                               {option, _Type, Default}
@@ -789,9 +786,9 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
                           {[Str | Res], Seen};
                       false ->
                           {[tuple_to_atd_string(
-                              RefElem, RecDict, TaggedElems,
-                              TypesDict, FunDict, Opts,
-                              PredefRecords, Tag) | Res],
+                              RefElem, TaggedElems,
+                              TypesDict, FunDict,
+                              Tag) | Res],
                            Seen}
                           %{Res, Seen}
                   end
@@ -810,8 +807,7 @@ make_atd_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict
      "]"
     ].
 
-record_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
-                     RecTypes, FunTypes, Opts, Types, PredefRecords) ->
+record_to_atd_string(#elem{result = Result}, Types, PredefRecords) ->
     [RecName | RecLabels] = tuple_to_list(Result),
     Prefix = ["type ", to_atd_var(RecName), " = {", io_lib:nl(),
               "\s\s"],
@@ -876,8 +872,8 @@ record_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
             end
     end.
 
-tuple_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
-                    RecTypes, FunTypes, Opts, PredefRecords, RecName) ->
+tuple_to_atd_string(#elem{result = Result} = Elem, AllElems,
+                    RecTypes, FunTypes, RecName) ->
     RecLabels = tuple_to_list(Result),
     Prefix = "type " ++ sanitize_for_atd(RecName) ++ " = (",
     Sep = " * ",
@@ -885,8 +881,7 @@ tuple_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
            fun(Label) ->
                    JSONType = get_label_json_type(
                                 Label, Elem, RecTypes,
-                                FunTypes, AllElems, Opts),
-                   FName = label_to_record_field(Label),
+                                FunTypes, AllElems),
                    case JSONType of
                        ignore -> [];
                        Type ->
@@ -896,8 +891,8 @@ tuple_to_atd_string(#elem{result = Result} = Elem, RecDict, AllElems,
     RecordStr = [Prefix, string:join(Fs, Sep), ")"],
     RecordStr.
 
-record_to_atd_types(#elem{result = Result} = Elem, RecDict, AllElems,
-                    RecTypes, FunTypes, Opts) ->
+record_to_atd_types(#elem{result = Result} = Elem, AllElems,
+                    RecTypes, FunTypes) ->
     [RecName | RecLabels] = tuple_to_list(Result),
     {RecName,
      lists:map(
@@ -906,7 +901,7 @@ record_to_atd_types(#elem{result = Result} = Elem, RecDict, AllElems,
                    true ->
                        get_label_json_type(
                          Label, Elem, RecTypes,
-                         FunTypes, AllElems, Opts);
+                         FunTypes, AllElems);
                    false ->
                        {atom, [Label]}
                end
@@ -934,9 +929,8 @@ merge_json_types([T1], T2) ->
     merge_json_types(T1, T2);
 merge_json_types(T1, [T2]) ->
     merge_json_types(T1, T2);
-merge_json_types(T1, T2) ->
-    io:format("merge ~p~n", [{T1, T2}]),
-    T1.
+merge_json_types(_T1, _T2) ->
+    erlang:error({internal_error, ?MODULE}).
 
 sanitize_for_atd(Atom) when is_atom(Atom) ->
     sanitize_for_atd(atom_to_binary(Atom, utf8));
@@ -1057,18 +1051,7 @@ make_top_decoders(TaggedSpecs, ModName, Opts) ->
                 []
         end.
 
-make_top_decoders_json(TaggedSpecs, ModName) ->
-    ResolverMod = resolver_mod(ModName),
-    TagNSMods = lists:foldl(
-		  fun({_, #elem{xmlns = XMLNS, name = Name, module = Mod}}, Acc)
-			when is_list(XMLNS) ->
-			  lists:foldl(
-			    fun(NS, D) ->
-				    dict:store({Name, NS}, Mod, D)
-			    end, Acc, XMLNS);
-		     ({_, #elem{xmlns = XMLNS, name = Name, module = Mod}}, Acc) ->
-			  dict:store({Name, XMLNS}, Mod, Acc)
-		  end, dict:new(), TaggedSpecs),
+make_top_decoders_json(TaggedSpecs, _ModName) ->
     RecordMods = lists:foldl(
 		   fun({_, #elem{result = Result, module = Mod}}, Acc) ->
 			   case term_is_record(Result) of
@@ -1594,7 +1577,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
         case proplists:get_bool(json, Opts) of
             true ->
                 make_elem_dec_fun_json(Elem, Tag, AllElems, Types,
-                                       ModName, FunSpecs, PredefRecords, Opts);
+                                       ModName, FunSpecs, PredefRecords);
             false ->
                 []
         end,
@@ -1603,7 +1586,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
         case proplists:get_bool(json, Opts) of
             true ->
                 make_elem_enc_fun_json(Elem, Tag, AllElems, ModName,
-                                       Types, FunSpecs, PredefRecords, Opts);
+                                       Types, FunSpecs, PredefRecords);
             false ->
                 []
         end,
@@ -2187,16 +2170,13 @@ make_ref_enc_funs(Elem, Tag, AllElems) ->
       end, group_refs(Elem#elem.refs)).
 
 make_elem_dec_fun_json(
-  #elem{name = Name, result = Result, refs = Refs, module = Mod,
-        cdata = CData, attrs = Attrs, xmlns = XMLNS,
-        ignore_els = IgnoreEls} = Elem,
-  Tag, AllElems, Types, ModName, FunTypes, PredefRecords, Opts) ->
+  #elem{result = Result} = Elem,
+  Tag, AllElems, Types, ModName, FunTypes, PredefRecords) ->
     {_Tags, RecTypes, _RecDict} = Types,
     case term_is_record(Result) of
         true ->
             ResultWithVars = subst_labels(Result, PredefRecords),
             [RecName | RecLabels] = tuple_to_list(Result),
-            BRecName = atom_to_binary(RecName, utf8),
             RecLabels2 =
                 lists:filter(
                   fun(Label) ->
@@ -2204,7 +2184,7 @@ make_elem_dec_fun_json(
                               true ->
                                   JSONType = get_label_json_type(
                                                Label, Elem, RecTypes,
-                                               FunTypes, AllElems, Opts),
+                                               FunTypes, AllElems),
                                   case JSONType of
                                       ignore ->
                                           false;
@@ -2222,8 +2202,7 @@ make_elem_dec_fun_json(
                             true ->
                                 JSONType = get_label_json_type(
                                              Label, Elem, RecTypes,
-                                             FunTypes, AllElems, Opts),
-                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                             FunTypes, AllElems),
                                 decode_json_field2(
                                   JSONType, ?AST(_value),
                                   Elem#elem.module, ModName);
@@ -2269,9 +2248,9 @@ make_elem_dec_fun_json(
                                  )])]
                                 ++ make_json_fields_dec_fun(
                                      make_dec_fun_name([fields, Tag, json]),
-                                     RecLabels2, Tag,
+                                     RecLabels2,
                                      Elem, RecTypes, FunTypes, AllElems,
-                                     Opts, ModName)
+                                     ModName)
                     end
             end;
         false when is_tuple(Result) ->
@@ -2281,9 +2260,9 @@ make_elem_dec_fun_json(
                             Var = label_to_var(Label),
                             JSONType = get_label_json_type(
                                          Label, Elem, RecTypes,
-                                         FunTypes, AllElems, Opts),
+                                         FunTypes, AllElems),
                             decode_json_field(
-                              JSONType, Label, Var,
+                              JSONType, Var,
                               Elem#elem.module, ModName)
                     end, RecLabels),
             [erl_syntax:function(
@@ -2294,16 +2273,13 @@ make_elem_dec_fun_json(
                   [erl_syntax:tuple(Res)]
                  )])];
         false when is_atom(Result) ->
-io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
             Label = Result,
             Res =
                 case is_label(Label) of
                     true ->
                         JSONType = get_label_json_type(
                                      Label, Elem, RecTypes,
-                                     FunTypes, AllElems, Opts),
-                        io:format("ref ~p~n", [{Label, JSONType}]),
-                        VLabel = label_to_var(Label),
+                                     FunTypes, AllElems),
                         decode_json_field2(
                           JSONType, ?AST(_val),
                           Elem#elem.module, ModName);
@@ -2319,12 +2295,11 @@ io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
                   [Res]
                  )])];
         false ->
-io:format("refs2 ~p~n", [{Tag, Refs, Result}]),
             []
     end.
 
-make_json_fields_dec_fun(FunName, Attrs, Tag,
-                         Elem, RecTypes, FunTypes, AllElems, Opts, ModName) ->
+make_json_fields_dec_fun(FunName, Attrs,
+                         Elem, RecTypes, FunTypes, AllElems, ModName) ->
     AttrVars = lists:map(fun label_to_var/1, Attrs),
     Clauses =
         lists:map(
@@ -2363,9 +2338,9 @@ make_json_fields_dec_fun(FunName, Attrs, Tag,
                                Var = label_to_var(Label),
                                JSONType = get_label_json_type(
                                             Label, Elem, RecTypes,
-                                            FunTypes, AllElems, Opts),
+                                            FunTypes, AllElems),
                                decode_json_field(
-                                 JSONType, Label, Var,
+                                 JSONType, Var,
                                  Elem#elem.module, ModName)
                        end, Attrs),
             NilClause = erl_syntax:clause(
@@ -2467,16 +2442,12 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
           ])])] ++ make_ref_enc_funs(Elem, Tag, AllElems).
 
 make_elem_enc_fun_json(
-  #elem{result = Result, attrs = Attrs,
-        name = ElemName,
-        cdata = CData, refs = Refs} = Elem,
-  Tag, AllElems, ModName, Types, FunTypes, PredefRecords, Opts) ->
-io:format("refs ~p~n", [{Tag, Refs, Result}]),
+  #elem{result = Result} = Elem,
+  Tag, AllElems, ModName, Types, FunTypes, PredefRecords) ->
     case term_is_record(Result) of
         true ->
             {_Tags, RecTypes, _RecDict} = Types,
             [RecName | RecLabels] = tuple_to_list(Result),
-            BRecName = atom_to_binary(RecName, utf8),
             ConvertLabelFun =
                 fun(Label, {K, ASTs}) ->
                         InVar = erl_syntax:variable(
@@ -2489,8 +2460,7 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                                 FBName = atom_to_binary(FName, utf8),
                                 JSONType = get_label_json_type(
                                              Label, Elem, RecTypes,
-                                             FunTypes, AllElems, Opts),
-                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                             FunTypes, AllElems),
                                 Value =
                                     encode_json_field(
                                       JSONType, Label, InVar, FBName,
@@ -2524,8 +2494,7 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                             true ->
                                 JSONType = get_label_json_type(
                                              Label, Elem, RecTypes,
-                                             FunTypes, AllElems, Opts),
-                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                             FunTypes, AllElems),
                                 encode_json_field2(
                                   JSONType, ?AST(_val),
                                   Elem#elem.module, ModName);
@@ -2573,8 +2542,7 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                             true ->
                                 JSONType = get_label_json_type(
                                              Label, Elem, RecTypes,
-                                             FunTypes, AllElems, Opts),
-                                io:format("ref ~p~n", [{Label, JSONType}]),
+                                             FunTypes, AllElems),
                                 VLabel = label_to_var(Label),
                                 Res = encode_json_field2(
                                         JSONType, VLabel,
@@ -2606,7 +2574,6 @@ io:format("refs ~p~n", [{Tag, Refs, Result}]),
                   [JSON]
                  )])];
         false when is_atom(Result) ->
-io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
             Label = Result,
             {_Tags, RecTypes, _RecDict} = Types,
             Res =
@@ -2614,8 +2581,7 @@ io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
                     true ->
                         JSONType = get_label_json_type(
                                      Label, Elem, RecTypes,
-                                     FunTypes, AllElems, Opts),
-                        io:format("ref ~p~n", [{Label, JSONType}]),
+                                     FunTypes, AllElems),
                         encode_json_field2(
                           JSONType, ?AST(_val),
                           Elem#elem.module, ModName);
@@ -2631,7 +2597,6 @@ io:format("refs3 ~p~n", [{Tag, Refs, Result}]),
                   [Res]
                  )])];
         false ->
-io:format("refs2 ~p~n", [{Tag, Refs, Result}]),
             []
     end.
 
@@ -2664,10 +2629,7 @@ encode_json_field(Type, Label, InVar, FBName, ModName, TopModName) ->
                         );
                 false ->
                     ?AST([{'?a(FBName)', '?Res'} | '?InVar'])
-            end;
-        _ ->
-            Res = encode_json_field2(Type, VLabel, ModName, TopModName),
-            ?AST([{'?a(FBName)', '?Res'} | '?InVar'])
+            end
     end.
 
 encode_json_field2(Type, InVar, ModName, TopModName) ->
@@ -2693,7 +2655,6 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
                     InVar
             end;
         {external, _, RefMod, RefTag} ->
-            io:format("ext ~p~n", [Type]),
             make_function_call(
               make_enc_fun_name(ModName, RefMod, [RefTag, json]),
               [InVar]);
@@ -2734,7 +2695,7 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
                           ]}
                  end('?InVar'));
         {atom, unknown} ->
-            io:format("asd ~p~n", [Type]),
+            erlang:error({internal_error, ?MODULE}),
             InVar;
         {atom, _} ->
             encode_json_case([Type], InVar, ModName, TopModName);
@@ -2753,12 +2714,10 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
         xmpp_element ->
               ?AST('?a(TopModName)':encode_json('?InVar'));
         _ ->
-            io:format("asd ~p~n", [Type]),
-            InVar
+            erlang:error({internal_error, ?MODULE})
     end.
 
 encode_json_case(Types, InVar, ModName, TopModName) ->
-    io:format("cases' ~p~n", [Types]),
     TMap =
         lists:foldl(
           fun({atom, Atoms}, Map) ->
@@ -2784,7 +2743,6 @@ encode_json_case(Types, InVar, ModName, TopModName) ->
                           maps:put(Tag, Rec, Map)
                   end
           end, maps:new(), Types),
-    io:format("cases ~p~n", [TMap]),
     Clauses =
         lists:map(
           fun({Atom, atom}) ->
@@ -2808,7 +2766,7 @@ encode_json_case(Types, InVar, ModName, TopModName) ->
           end, maps:to_list(TMap)),
     erl_syntax:case_expr(InVar, Clauses).
 
-decode_json_field(Type, Label, InVar, ModName, TopModName) ->
+decode_json_field(Type, InVar, ModName, TopModName) ->
     case Type of
         ignore ->
             erlang:error({internal_error, ?MODULE});
@@ -2838,9 +2796,7 @@ decode_json_field(Type, Label, InVar, ModName, TopModName) ->
                         );
                 false ->
                     Res
-            end;
-        _ ->
-            decode_json_field2(Type, InVar, ModName, TopModName)
+            end
     end.
 
 decode_json_field2(Type, InVar, ModName, TopModName) ->
@@ -2866,7 +2822,6 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
                     InVar
             end;
         {external, _, RefMod, RefTag} ->
-            io:format("ext ~p~n", [Type]),
             make_function_call(
               make_dec_fun_name(ModName, RefMod, [RefTag, json]),
               [InVar]);
@@ -2904,7 +2859,7 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
                          end
                  end('?InVar'));
         {atom, unknown} ->
-            io:format("asd ~p~n", [Type]),
+            erlang:error({internal_error, ?MODULE}),
             InVar;
         {atom, _} ->
             decode_json_case([Type], InVar, ModName, TopModName);
@@ -2922,12 +2877,10 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
         xmpp_element ->
             ?AST('?a(TopModName)':decode_json('?InVar'));
         _ ->
-            io:format("asd ~p~n", [Type]),
-            InVar
+            erlang:error({internal_error, ?MODULE})
     end.
 
 decode_json_case(Types, InVar, ModName, TopModName) ->
-    io:format("cases' ~p~n", [Types]),
     TMap =
         lists:foldl(
           fun({atom, Atoms}, Map) ->
@@ -2953,7 +2906,6 @@ decode_json_case(Types, InVar, ModName, TopModName) ->
                           maps:put(Tag, Rec, Map)
                   end
           end, maps:new(), Types),
-    io:format("cases ~p~n", [TMap]),
     Clauses =
         lists:map(
           fun({Atom, atom}) ->
@@ -2962,7 +2914,7 @@ decode_json_case(Types, InVar, ModName, TopModName) ->
                     [?AST('?a(BAtom)')],
                     none,
                     [?AST('?a(Atom)')]);
-             ({Tag, {external, {record, Tag, Arity}, _, _} = Rec}) ->
+             ({Tag, {external, {record, Tag, _Arity}, _, _} = Rec}) ->
                   BTag = atom_to_binary(Tag, utf8),
                   Pattern = ?AST(['?a(BTag)', _]),
                   Res = decode_json_field2(Rec, InVar, ModName, TopModName),
@@ -2973,7 +2925,7 @@ decode_json_case(Types, InVar, ModName, TopModName) ->
           end, maps:to_list(TMap)),
     erl_syntax:case_expr(InVar, Clauses).
 
-get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems, Opts) ->
+get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems) ->
     case get_spec_by_label(Label, Elem) of
         sub_els ->
             {list, xmpp_element};
@@ -3040,10 +2992,6 @@ get_label_json_type(Label, Elem, Dict, FunSpecs, AllElems, Opts) ->
                                       erlang:error({internal_error, ?MODULE})
 			      end
                       end, Refs),
-            if true orelse length(Refs) > 1 ->
-                    io:format("qaz ~p~n", [{Refs, Types}]);
-               true -> ok
-            end,
             IsRequired = (Min == 1) and (Max == 1),
             case {Default, IsRequired, Max} of
                 {false, false, 1} when Types == [{atom,[true]}] ->
@@ -3078,7 +3026,6 @@ get_json_type(FType, Default, IsRequired) ->
     end.
 
 get_json_type2(FType) ->
-    io:format("ttt ~p~n", [FType]),
     case erl_types:t_is_tuple(FType) of
         true ->
             case erl_types:t_tuple_args(FType) of
@@ -3095,7 +3042,6 @@ get_json_type2(FType) ->
                             erlang:error({internal_error, ?MODULE})
                     end;
                 Args ->
-                    io:format("tuple ~p~n", [{FType, Args}]),
                     {tuple, lists:map(fun get_json_type2/1, Args)}
             end;
         false ->
@@ -3183,7 +3129,7 @@ json_type_to_atd(Type) ->
         binary -> "string";
         integer -> "int";
         boolean -> "bool";
-        {binary, DecFun, _EncFun} -> "string";
+        {binary, _DecFun, _EncFun} -> "string";
         %{external, _, _RefMod, RefTag} -> atom_to_list(RefTag);
         {external, {record, Tag, _}, _RefMod, _RefTag} ->
             sanitize_for_atd(Tag);
@@ -3243,7 +3189,7 @@ json_case_to_atd(Types) ->
         lists:map(
           fun({Atom, atom}) ->
                   to_atd_variant(Atom);
-             ({Tag, {external, {record, Tag, Arity}, _, _} = Rec}) ->
+             ({Tag, {external, {record, Tag, _Arity}, _, _}}) ->
                   RecName = sanitize_for_atd(Tag),
                   [to_atd_variant(Tag), " of ", RecName]
           end, maps:to_list(TMap)),
