@@ -373,13 +373,11 @@ compile(TaggedElems0, Forms, Path, Opts) ->
 		       Acc)
 	     end, dict:from_list([{ModName, []}]), TaggedElems),
     Records = make_records(Types, TaggedElems, PredefRecords, FunSpecs, Opts),
-    ATDRecords = make_atd_records(Types, TaggedElems, PredefRecords,
-                                  FunSpecs, Opts),
     TypeSpecs = make_typespecs(ModName, Types, Opts),
     Hdr = header(FileName),
     FunDeps = build_fun_deps(FunForms),
     case write_modules(ASTs, ModName, FunDeps, ErlDirName,
-		       FileName, TaggedElems, PredefRecords) of
+		       FileName, TaggedElems, PredefRecords, Opts) of
         ok ->
 	    case write_resolver(TaggedElems, ModName, ErlDirName, FileName) of
 		ok ->
@@ -394,12 +392,20 @@ compile(TaggedElems0, Forms, Path, Opts) ->
 		       io_lib:nl(),
 		       TypeSpecs,
 		       io_lib:nl()]),
-		    io:format("Generating ~s~n", [ModNameATD]),
-		    file:write_file(
-		      filename:join([HrlDirName, ModNameATD]),
-		      [atd_header(FileName),
-		       ATDRecords,
-                       io_lib:nl()]);
+                    case proplists:get_bool(json, Opts) of
+                        true ->
+                            io:format("Generating ~s~n", [ModNameATD]),
+                            ATDRecords =
+                                make_atd_records(Types, TaggedElems, PredefRecords,
+                                                 FunSpecs, Opts),
+                            file:write_file(
+                              filename:join([HrlDirName, ModNameATD]),
+                              [atd_header(FileName),
+                               ATDRecords,
+                               io_lib:nl()]);
+                        false ->
+                            ok
+                    end;
 		Err ->
 		    Err
 	    end;
@@ -408,27 +414,27 @@ compile(TaggedElems0, Forms, Path, Opts) ->
     end.
 
 write_modules(ASTs, ModName, FunDeps, ErlDirName,
-	      FileName, TaggedElems, PredefRecords) ->
+	      FileName, TaggedElems, PredefRecords, Opts) ->
     dict:fold(
       fun(_, _, {error, _} = Err) ->
 	      Err;
 	 (Mod, AST, ok) ->
 	      write_module(ModName, Mod, AST, FunDeps, ErlDirName,
-			   FileName, TaggedElems, PredefRecords)
+			   FileName, TaggedElems, PredefRecords, Opts)
       end, ok, ASTs).
 
 write_module(ModName, ModName, AST, FunDeps, ErlDirName,
-	     SpecFile, TaggedElems, PredefRecords) ->
+	     SpecFile, TaggedElems, PredefRecords, Opts) ->
     ModNameErl = atom_to_list(ModName) ++ ".erl",
     io:format("Generating ~s~n", [ModNameErl]),
     Module = erl_syntax:attribute(
                ?AST(module),
                [erl_syntax:atom(ModName)]),
-    TopDecoders = make_top_decoders(TaggedElems, ModName),
-    TopEncoders = make_top_encoders(TaggedElems, ModName),
+    TopDecoders = make_top_decoders(TaggedElems, ModName, Opts),
+    TopEncoders = make_top_encoders(TaggedElems, ModName, Opts),
     Registrar = make_registrar(ModName),
-    Decoders = make_decoders(TaggedElems, PredefRecords, ModName, ModName),
-    Encoders = make_encoders(TaggedElems, ModName),
+    Decoders = make_decoders(TaggedElems, PredefRecords, ModName, ModName, Opts),
+    Encoders = make_encoders(TaggedElems, ModName, Opts),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ModName),
     GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
     Resolver = make_resolver(TaggedElems, ModName),
@@ -443,15 +449,15 @@ write_module(ModName, ModName, AST, FunDeps, ErlDirName,
       filename:join([ErlDirName, ModNameErl]),
       [erl_prettypr:format(ResultAST), io_lib:nl()]);
 write_module(ParentMod, ModName, AST, FunDeps, ErlDirName,
-	     SpecFile, TaggedElems, PredefRecords) ->
+	     SpecFile, TaggedElems, PredefRecords, Opts) ->
     ModNameErl = atom_to_list(ModName) ++ ".erl",
     io:format("Generating ~s~n", [ModNameErl]),
     Hdr = header(SpecFile),
     Module = erl_syntax:attribute(
                ?AST(module),
                [erl_syntax:atom(ModName)]),
-    Decoders = make_decoders(TaggedElems, PredefRecords, ParentMod, ModName),
-    Encoders = make_encoders(TaggedElems, ModName),
+    Decoders = make_decoders(TaggedElems, PredefRecords, ParentMod, ModName, Opts),
+    Encoders = make_encoders(TaggedElems, ModName, Opts),
     Printer = make_printer(TaggedElems, PredefRecords, ModName, ParentMod),
     GettersSetters = make_getters_setters(TaggedElems, PredefRecords, ModName),
     Compile = erl_syntax:attribute(?AST(compile), [?AST(export_all)]),
@@ -1020,7 +1026,7 @@ make_resolver(TaggedSpecs, ModName) ->
     [erl_syntax:function(?AST(get_mod), Clauses1),
      erl_syntax:function(?AST(get_mod), Clauses2)].
 
-make_top_decoders(TaggedSpecs, ModName) ->
+make_top_decoders(TaggedSpecs, ModName, Opts) ->
     C0 = ?AST(XMLNS = get_attr(<<"xmlns">>, Attrs, TopXMLNS)),
     C1 = erl_syntax:case_expr(
 	   ?AST(get_mod(Name, XMLNS)),
@@ -1044,7 +1050,12 @@ make_top_decoders(TaggedSpecs, ModName) ->
        "decode",
        [?AST({xmlel, Name, Attrs, _} = El), ?AST(TopXMLNS), ?AST(Opts)],
        [C0, C1])] ++
-        make_top_decoders_json(TaggedSpecs, ModName).
+        case proplists:get_bool(json, Opts) of
+            true ->
+                make_top_decoders_json(TaggedSpecs, ModName);
+            false ->
+                []
+        end.
 
 make_top_decoders_json(TaggedSpecs, ModName) ->
     ResolverMod = resolver_mod(ModName),
@@ -1078,7 +1089,7 @@ make_top_decoders_json(TaggedSpecs, ModName) ->
                 end, [], RecordMods),
     [erl_syntax:function(?AST(decode_json), Clauses)].
 
-make_decoders(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
+make_decoders(TaggedSpecs1, PredefRecords, ParentMod, ModName, Opts) ->
     TaggedSpecs = lists:flatmap(
 		    fun({Tag, #elem{xmlns = XMLNSs, module = Mod} = E})
 			  when Mod == ModName ->
@@ -1118,7 +1129,13 @@ make_decoders(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
 			fun({_, #elem{name = Name, xmlns = NS}}) ->
 				?AST({'?a(Name)', '?a(NS)'})
 			end, TaggedSpecs))])] ++
-        make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName).
+        case proplists:get_bool(json, Opts) of
+            true ->
+                make_decoders_json(TaggedSpecs1, PredefRecords,
+                                   ParentMod, ModName);
+            false ->
+                []
+        end.
 
 make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
     TaggedSpecs =
@@ -1231,7 +1248,7 @@ make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
     [erl_syntax:function(erl_syntax:atom(do_decode_json),
                          Clauses ++ NilClause)].
 
-make_top_encoders(_TaggedSpecs, _ModName) ->
+make_top_encoders(_TaggedSpecs, _ModName, Opts) ->
     Clause1 = erl_syntax:clause(
 		[?AST({xmlel, _, _, _} = El), ?AST(_)],
 		none,
@@ -1267,7 +1284,12 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
                   ?AST(Mod:do_encode_json(El))]),
     [make_function(encode, [?AST(El)], [?AST(encode(El, <<>>))]),
      erl_syntax:function(?AST(encode), [Clause1, Clause2, Clause3]),
-     erl_syntax:function(?AST(encode_json), [JClause1, JClause3]),
+     case proplists:get_bool(json, Opts) of
+         true ->
+             erl_syntax:function(?AST(encode_json), [JClause1, JClause3]);
+         false ->
+             erl_syntax:comment([])
+     end,
      make_function(get_name, [?AST(El)], GetNameCase),
      make_function(get_ns, [?AST(El)], GetNSCase),
      make_function(is_known_tag,
@@ -1280,7 +1302,7 @@ make_top_encoders(_TaggedSpecs, _ModName) ->
 		   [?AST(Mod = get_mod(Term)),
 		    ?AST(Mod:set_els(Term, Els))])].
 
-make_encoders(TaggedSpecs, ModName) ->
+make_encoders(TaggedSpecs, ModName, Opts) ->
     {RecNames, ResNames} =
 	lists:foldl(
 	  fun({Tag, #elem{result = Result, module = Mod}}, {RecAcc, ResAcc})
@@ -1297,6 +1319,7 @@ make_encoders(TaggedSpecs, ModName) ->
 	     (_, Acc) ->
 		  Acc
 	  end, {dict:new(), dict:new()}, TaggedSpecs),
+    JSONEnabled = proplists:get_bool(json, Opts),
     {EncClauses, EncJSONClauses, NSClauses, TagClauses, _} =
         lists:foldl(
           fun({Tag, #elem{name = Name, xmlns = XMLNS, module = Mod,
@@ -1347,7 +1370,7 @@ make_encoders(TaggedSpecs, ModName) ->
 					   []
 				   end ++ EncAcc
 		       end,
-		       if AlreadySeen ->
+		       if AlreadySeen or not JSONEnabled ->
 			       EncJSONAcc;
 			  true ->
 			       Call = make_function_call(
@@ -1389,8 +1412,11 @@ make_encoders(TaggedSpecs, ModName) ->
                   end
           end, {[], [], [], [], []}, TaggedSpecs),
     if EncClauses /= [] ->
-	    [erl_syntax:function(?AST(do_encode), EncClauses),
-             erl_syntax:function(?AST(do_encode_json), EncJSONClauses)];
+	    [erl_syntax:function(?AST(do_encode), EncClauses)];
+       true -> []
+    end ++
+    if EncJSONClauses /= [] ->
+	    [erl_syntax:function(?AST(do_encode_json), EncJSONClauses)];
        true -> []
     end ++
     if TagClauses /= [] ->
@@ -1564,11 +1590,23 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
         end,
     DecAST = make_elem_dec_fun(Elem, Tag, AllElems, Types,
 			       ModName, PredefRecords, Opts),
-    DecJsonAST = make_elem_dec_fun_json(Elem, Tag, AllElems, Types,
-                                        ModName, FunSpecs, PredefRecords, Opts),
+    DecJsonAST =
+        case proplists:get_bool(json, Opts) of
+            true ->
+                make_elem_dec_fun_json(Elem, Tag, AllElems, Types,
+                                       ModName, FunSpecs, PredefRecords, Opts);
+            false ->
+                []
+        end,
     EncAST = make_elem_enc_fun(Elem, Tag, AllElems, ModName),
-    EncJsonAST = make_elem_enc_fun_json(Elem, Tag, AllElems, ModName,
-                                        Types, FunSpecs, PredefRecords, Opts),
+    EncJsonAST =
+        case proplists:get_bool(json, Opts) of
+            true ->
+                make_elem_enc_fun_json(Elem, Tag, AllElems, ModName,
+                                       Types, FunSpecs, PredefRecords, Opts);
+            false ->
+                []
+        end,
     DecAST ++ DecJsonAST ++ EncAST ++ EncJsonAST ++ AttrAST ++ CDataAST.
 
 %% Replace in `Term' every label found in `Labels'
