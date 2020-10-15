@@ -935,7 +935,7 @@ merge_json_types(_T1, _T2) ->
 sanitize_for_atd(Atom) when is_atom(Atom) ->
     sanitize_for_atd(atom_to_binary(Atom, utf8));
 sanitize_for_atd(Str) ->
-    string:replace(Str, <<"-">>, <<"_">>, all).
+    string_replace(Str, <<"-">>, <<"_">>, all).
 
 to_atd_var(Atom) when is_atom(Atom) ->
     to_atd_var(atom_to_binary(Atom, utf8));
@@ -951,8 +951,21 @@ to_atd_var(Str) ->
 to_atd_variant(Atom) when is_atom(Atom) ->
     to_atd_variant(atom_to_binary(Atom, utf8));
 to_atd_variant(S) ->
-    [string:titlecase(sanitize_for_atd(S)),
+    [string_titlecase(sanitize_for_atd(S)),
      " <json name=\"", S, "\">"].
+
+-ifdef(OLD_STRING).
+string_replace(Str, Search, Replace, all) ->
+    re:replace(Str, Search, Replace, [global, {return, binary}]).
+string_titlecase(S) ->
+    <<Head, Tail/binary>> = S,
+    <<(string:to_upper(Head)), Tail/binary>>.
+-else.
+string_replace(Str, Search, Replace, Where) ->
+    string:replace(Str, Search, Replace, Where).
+string_titlecase(S) ->
+    string:titlecase(S).
+-endif.
 
 atd_header(FileName) ->
     ["(* Created automatically by XML generator (fxml_gen.erl) *)", io_lib:nl(),
