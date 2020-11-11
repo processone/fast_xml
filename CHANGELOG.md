@@ -1,3 +1,9 @@
+# Version 1.1.44
+
+* Get back compatibility with Erlang older than 20
+* Add JSON encode/decode functions generation
+* Update hex to compile ejabberd with rebar3
+
 # Version 1.1.43
 
 * Updating p1_utils to version 1.0.20.
