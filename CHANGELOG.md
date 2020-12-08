@@ -1,3 +1,7 @@
+# Version 1.1.45
+
+* Updating p1_utils to version 1.0.21.
+
 # Version 1.1.44
 
 * Get back compatibility with Erlang older than 20
