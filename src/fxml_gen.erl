@@ -325,12 +325,8 @@ compile(TaggedElems0, Forms, Path, Opts) ->
 		 fun(Form, D) ->
 			 case erl_syntax_lib:analyze_attribute(Form) of
 			     {spec, _} ->
-				 case get_fun_spec(erl_syntax:revert(Form)) of
-				     {Key, Value} ->
-					 dict:store(Key, Value, D);
-				     _ ->
-					 D
-				 end;
+				 {Key, Value} = get_fun_spec(erl_syntax:revert(Form)),
+				 dict:store(Key, Value, D);
 			     _ ->
 				 D
 			 end
@@ -811,7 +807,7 @@ record_to_atd_string(#elem{result = Result}, Types, PredefRecords) ->
     [RecName | RecLabels] = tuple_to_list(Result),
     Prefix = ["type ", to_atd_var(RecName), " = {", io_lib:nl(),
               "\s\s"],
-    Sep = [";", io_lib:nl(), "\s\s"],
+    Sep = lists:flatten([";", io_lib:nl(), "\s\s"]),
     {_, RevRecFields} =
         lists:foldl(
           fun(Label, {K, Fs}) ->
