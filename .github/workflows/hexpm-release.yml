@@ -1,0 +1,33 @@
+name: hexpm-release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v2
+
+      - name: Generate documentation
+        run: rebar3 edoc
+
+      - name: list dir
+        run: ls -la
+
+      - name: Publish to hex.pm
+        run: DEBUG=1 rebar3 hex publish --repo hexpm --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+      - name: Show dump head
+        run: head rebar3.crashdump
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rebar3-dump
+          path: rebar*
+          if-no-files-found: ignore
