@@ -967,8 +967,8 @@ atd_header(FileName) ->
     ["(* Created automatically by XML generator (fxml_gen.erl) *)", io_lib:nl(),
      "(* Source: ", FileName, " *)", io_lib:nl(),
      io_lib:nl(),
-     "type jid = {user : string; server : string; resource : string; ",
-     "~luser : string; ~lserver : string; ~lresource : string}", io_lib:nl(),
+     "type jid = (string * string * string) wrap <ocaml module=\"Jid\">",
+     io_lib:nl(),
      io_lib:nl()].
 
 atd_value_to_string(<<>>) -> "\\\"\\\"";
@@ -2696,13 +2696,7 @@ encode_json_field2(Type, InVar, ModName, TopModName) ->
             ?AST(enc_ip('?InVar'));
         jid ->
             ?AST(fun({jid, _U, _S, _R, _LU, _LS, _LR}) ->
-                         {[{<<"user">>, _U},
-                           {<<"server">>, _S},
-                           {<<"resource">>, _R},
-                           {<<"luser">>, _LU},
-                           {<<"lserver">>, _LS},
-                           {<<"lresource">>, _LR}
-                          ]}
+                         [_U, _S, _R]
                  end('?InVar'));
         {atom, unknown} ->
             erlang:error({internal_error, ?MODULE}),
@@ -2860,11 +2854,9 @@ decode_json_field2(Type, InVar, ModName, TopModName) ->
         ip_address ->
             ?AST(dec_ip('?InVar'));
         jid ->
-            ?AST(fun({_jid}) ->
-                         case jid:make(proplists:get_value(<<"user">>, _jid, <<>>),
-                                       proplists:get_value(<<"server">>, _jid),
-                                       proplists:get_value(<<"resource">>, _jid, <<>>)) of
-                             error -> erlang:error({bad_jid, _jid});
+            ?AST(fun([_U, _S, _R]) ->
+                         case jid:make(_U, _S, _R) of
+                             error -> erlang:error({bad_jid, {_U, _S, _R}});
                              _JID -> _JID
                          end
                  end('?InVar'));
