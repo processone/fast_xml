@@ -4156,18 +4156,31 @@ transform_spec_to_form(_) ->
 t_from_form(Spec) ->
     erl_types:t_from_form(Spec).
 -else.
+-ifdef(OLD_DIALYZER_NO_FILENAMES).
 t_from_form(Spec) ->
     erl_types:t_from_form(Spec, sets:new(), {spec, foo}, dict:new()).
+-else.
+t_from_form(Spec) ->
+    erl_types:t_from_form(Spec, sets:new(), {spec, foo, "mod.erl"}, dict:new()).
+-endif.
 -endif.
 
 t_remote(Mod, Type) ->
     erl_types:t_remote(Mod, Type, []).
 -else.
+-ifdef(OLD_DIALYZER_NO_FILENAMES).
 t_from_form(Spec) ->
     {T, _} = erl_types:t_from_form(
 	       Spec, sets:new(), {type, {mod, foo, 1}}, dict:new(),
 	       erl_types:var_table__new(), erl_types:cache__new()),
     T.
+-else.
+t_from_form(Spec) ->
+    {T, _} = erl_types:t_from_form(
+	       Spec, sets:new(), {type, {mod, foo, 1}, "mod.erl"}, dict:new(),
+	       erl_types:var_table__new(), erl_types:cache__new()),
+    T.
+-endif.
 
 t_remote(Mod, Type) ->
     D = dict_from_list([{{opaque, Type, []},
