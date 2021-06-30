@@ -1,4 +1,4 @@
-name: hexpm-release
+name: Hex
 
 on:
   push:
@@ -17,6 +17,10 @@ jobs:
 
       - name: list dir
         run: ls -la
+      - name: Setup rebar3 hex
+        run: |
+          mkdir -p ~/.config/rebar3/
+          echo "{plugins, [rebar3_hex]}." > ~/.config/rebar3/rebar.config
 
       - name: Publish to hex.pm
         run: DEBUG=1 rebar3 hex publish --repo hexpm --yes

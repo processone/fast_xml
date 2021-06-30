@@ -134,7 +134,7 @@ Rules = [
 	 {[deps], IsRebar3,
 	  Rebar3DepsFilter, []},
 	 {[plugins], IsRebar3,
-	  AppendList([rebar3_hex, pc]), []},
+	  AppendList([pc]), []},
 	 {[provider_hooks], IsRebar3,
 	  AppendList([{pre, [
 			     {compile, {pc, compile}},
@@ -142,8 +142,8 @@ Rules = [
 			    ]}]), []},
 	 {[plugins], os:getenv("COVERALLS") == "true",
 	  AppendList([{coveralls, {git,
-	                           "https://github.com/RoadRunnr/coveralls-erl.git",
-	                           {branch, "feature/git-info"}}} ]), []},
+	                           "https://github.com/processone/coveralls-erl.git",
+	                           {branch, "addjsonfile"}}} ]), []},
 	 {[deps], os:getenv("USE_GLOBAL_DEPS") /= false,
 	  GlobalDepsFilter, []}
 	],
