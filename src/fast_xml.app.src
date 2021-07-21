@@ -23,7 +23,7 @@
 
 {application, fast_xml,
  [{description,  "Fast Expat-based Erlang / Elixir XML parsing library"},
-  {vsn,          "1.1.46"},
+  {vsn,          "1.1.47"},
   {modules,      []},
   {registered,   []},
   {applications, [kernel, stdlib, p1_utils]},
