@@ -1554,6 +1554,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                           required = Required,
                           dec = AttrDecF,
                           enc = AttrEncF,
+                          always_encode = AlwaysEnc,
                           default = AttrDefault}) ->
                         make_decoding_MFA([AttrName,attr,Tag],
                                           Name, XMLNS, AttrName,
@@ -1561,7 +1562,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                                           AttrDecF, Types, ModName) ++
                             make_encoding_MFA([AttrName,attr,Tag],
                                               AttrName, Required, AttrDefault,
-                                              AttrEncF)
+                                              AttrEncF, AlwaysEnc)
                 end, Attrs),
     #cdata{label = CDataLabl,
            required = CDataRequired,
@@ -1576,7 +1577,7 @@ elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                                   CDataDecF, Types, ModName) ++
                     make_encoding_MFA([cdata,Tag], <<>>,
                                       CDataRequired, CDataDefault,
-                                      CDataEncF);
+                                      CDataEncF, false);
             false ->
                 []
         end,
@@ -3261,10 +3262,10 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
 		 ?AST(_val)], none, [Catch]),
     [erl_syntax:function(erl_syntax:atom(FunName), [Clause1, Clause2])].
 
-make_encoding_MFA(_, <<"xmlns">>, _, _, _) ->
+make_encoding_MFA(_, <<"xmlns">>, _, _, _, _) ->
     [];
-make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA) ->
-    Clause1 = if Required ->
+make_encoding_MFA(Parents, AttrName, Required, AttrDefault, EncMFA, AlwaysEnc) ->
+    Clause1 = if Required orelse AlwaysEnc ->
                       [];
                  true ->
                       [erl_syntax:clause(

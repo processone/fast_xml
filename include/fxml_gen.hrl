@@ -28,6 +28,7 @@
 	       label,
 	       required = false,
 	       default = '$unset',
+	       always_encode = false,
 	       dec,
 	       enc}).
 
