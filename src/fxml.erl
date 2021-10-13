@@ -27,6 +27,8 @@
 
 -compile(no_native).
 
+-on_load(init/0).
+
 -export([element_to_binary/1, element_to_header/1,
 	 crypt/1, remove_cdata/1,
 	 remove_subtags/3, get_cdata/1, get_tag_cdata/1,
@@ -40,6 +42,9 @@
 
 -include("fxml.hrl").
 -export_type([xmlel/0]).
+
+init() ->
+    ok = load_nif().
 
 %% Replace element_to_binary/1 with NIF
 load_nif() ->

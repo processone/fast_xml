@@ -53,6 +53,11 @@ static int load(ErlNifEnv* env, void** priv, ERL_NIF_TERM load_info)
   return 0;
 }
 
+static int upgrade(ErlNifEnv* env, void** priv, void** old_priv, ERL_NIF_TERM load_info)
+{
+  return load(env, priv, load_info);
+}
+
 static struct buf *init_buf(ErlNifEnv* env)
 {
   struct buf *rbuf = ENIF_ALLOC(sizeof(struct buf));
@@ -299,4 +304,4 @@ static ErlNifFunc nif_funcs[] =
     {"element_to_header", 1, element_to_header}
   };
 
-ERL_NIF_INIT(fxml, nif_funcs, load, NULL, NULL, NULL)
+ERL_NIF_INIT(fxml, nif_funcs, load, NULL, upgrade, NULL)

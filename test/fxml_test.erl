@@ -39,8 +39,10 @@ close(State) ->
     ?assertEqual(true, fxml_stream:close(State)).
 
 start_test() ->
-    ?assertEqual(ok, fxml:load_nif(p1_nif_utils:get_so_path(fxml, [], "fxml"))),
-    ?assertEqual(ok, fxml_stream:load_nif(p1_nif_utils:get_so_path(fxml_stream, [], "fxml_stream"))).
+    ?assertMatch({ok, _}, application:ensure_all_started(fast_xml)),
+    ?assertMatch(ok, application:stop(fast_xml)),
+    ?assertMatch({ok, _}, application:ensure_all_started(fast_xml)),
+    ?assertMatch(ok, application:stop(fast_xml)).
 
 tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
