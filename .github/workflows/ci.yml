@@ -16,6 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - run: ./configure
+    - run: make
     - run: rebar3 compile
     - run: rebar3 xref
     - run: rebar3 dialyzer
@@ -28,7 +29,6 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - run: ./configure --enable-gcov
-    - run: make
     - run: rebar3 compile
     - run: rebar3 eunit -v
     - run: rebar3 eunit -v
