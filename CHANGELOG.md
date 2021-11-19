@@ -1,3 +1,8 @@
+# Version 1.1.48
+
+* Load the NIFs in the on_load callback, to support restart
+* Add always_encode field to #attr{}
+
 # Version 1.1.47
 
 * Updating p1_utils to version 1.0.23.
