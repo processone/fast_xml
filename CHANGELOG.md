@@ -1,5 +1,6 @@
 # Version 1.1.48
 
+* Generate documentation before publishing to hex
 * Load the NIFs in the on_load callback, to support restart
 * Add always_encode field to #attr{}
 
