@@ -8,7 +8,7 @@
 
 * Updating p1_utils to version 1.0.23.
 * Switch from using Travis to Github Actions as CI
-* Fix compatiblity with OTP24
+* Fix compatibility with OTP24
 
 # Version 1.1.46
 
@@ -109,7 +109,7 @@
 
 # Version 1.1.25
 
-* Invalidate sotred data when generating stanza-too-big-error
+* Invalidate sorted data when generating stanza-too-big-error
 
 # Version 1.1.24
 
