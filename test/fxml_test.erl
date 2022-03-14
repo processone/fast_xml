@@ -48,6 +48,10 @@ tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
 		 fxml_stream:parse_element(<<"<root/>">>)).
 
+cve_2022_25236_test() ->
+    ?assertEqual({error, {2, <<"syntax error">>}},
+		 fxml_stream:parse_element(<<"<a><d xmlns='b&#xA;c' /><d:c xmlns:d='b' /></a>">>)).
+
 empty_tag_test() ->
     ?assertEqual(#xmlel{name = <<"root">>},
 		 fxml_stream:parse_element(<<"<root></root>">>)).
