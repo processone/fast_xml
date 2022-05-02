@@ -1,5 +1,6 @@
 # Version 1.1.49
 
+* Updating p1_utils to version 1.0.25.
 * Test for CVE-2022-25236 compilance
 
 # Version 1.1.48
