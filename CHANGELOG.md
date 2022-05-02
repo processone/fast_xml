@@ -1,3 +1,7 @@
+# Version 1.1.49
+
+* Test for CVE-2022-25236 compilance
+
 # Version 1.1.48
 
 * Generate documentation before publishing to hex
