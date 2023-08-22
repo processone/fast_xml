@@ -634,7 +634,7 @@ make_records({Tags, TypesDict, RecDict}, TaggedElems, PredefRecords, FunDict, Op
 make_typespecs(_ModName, {_Tags, _TypesDict, RecDict}, Opts) ->
     case proplists:get_value(add_type_specs, Opts) of
 	TypeName when is_atom(TypeName), TypeName /= undefined ->
-	    case [[atom_to_string(R), "()"]
+	    case [atom_to_string(R) ++ "()"
 		  || {record, R} <- lists:sort(dict_keys(RecDict))] of
 		[] ->
 		    [];
