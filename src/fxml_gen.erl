@@ -4167,7 +4167,8 @@ t_from_form(Spec) ->
 	       Spec, sets:new(), {type, {mod, foo, 1}}, dict:new(),
 	       erl_types:var_table__new(), erl_types:cache__new()),
     T.
--elif(?OTP_RELEASE < 25).
+-else.
+-ifdef(OTP_RELEASE_MINOR_25).
 t_from_form(Spec) ->
     {T, _} = erl_types:t_from_form(
 	       Spec, sets:new(), {type, {mod, foo, 1}, "mod.erl"}, dict:new(),
@@ -4179,6 +4180,7 @@ t_from_form(Spec) ->
 	       Spec, sets:new(), {type, {mod, foo, 1}, "mod.erl"}, ets:new(tmp, []),
 	       erl_types:var_table__new(), erl_types:cache__new()),
     T.
+-endif.
 -endif.
 
 t_remote(Mod, Type) ->
