@@ -1,3 +1,7 @@
+# Version 1.1.51
+
+* Fix hex release scripts
+
 # Version 1.1.50
 
 * Fix `make spec` on OTP >= 25
