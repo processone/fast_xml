@@ -781,6 +781,9 @@ static void setup_parser(state_t *state)
 				 erlXML_StartDoctypeDeclHandler);
   XML_SetReturnNSTriplet(state->parser, 1);
   XML_SetDefaultHandler(state->parser, (XML_DefaultHandler) erlXML_DefaultHandler);
+#if XML_MAJOR_VERSION > 2 || (XML_MAJOR_VERSION == 2 && XML_MINOR_VERSION >= 6)
+  XML_SetReparseDeferralEnabled(state->parser, XML_FALSE);
+#endif
 }
 
 static state_t *init_parser_state(ErlNifPid *pid)
