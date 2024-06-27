@@ -1,3 +1,8 @@
+# Version 1.1.52
+
+* Fix issues on OTP27
+* Make compatible with expat 2.6
+
 # Version 1.1.51
 
 * Fix hex release scripts
