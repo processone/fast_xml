@@ -1,5 +1,6 @@
 # Version 1.1.52
 
+* Updating p1_utils to version 1.0.26.
 * Fix issues on OTP27
 * Make compatible with expat 2.6
 
