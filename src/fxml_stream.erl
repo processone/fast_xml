@@ -30,7 +30,7 @@
 -on_load(init/0).
 
 -export([new/1, new/2, new/3, parse/2, close/1, reset/1,
-	 change_callback_pid/2, parse_element/1]).
+	 change_callback_pid/2, parse_element/1, parse_element/2]).
 
 -export([load_nif/0, load_nif/1]).
 
@@ -112,4 +112,10 @@ close(_State) ->
                                  {error, {integer(), binary()}}.
 
 parse_element(_Str) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec parse_element(binary(), [use_maps]) -> xmlel() |
+                                             {error, atom()} |
+                                             {error, {integer(), binary()}}.
+parse_element(_Str, _Options) ->
     erlang:nif_error(nif_not_loaded).

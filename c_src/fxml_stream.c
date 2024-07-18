@@ -862,9 +862,24 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
 {
   ERL_NIF_TERM el;
   ErlNifBinary bin;
+  int use_maps = 0;
 
-  if (argc != 1)
+  if (argc != 1 && argc != 2)
     return enif_make_badarg(env);
+
+  if (argc == 2) {
+    if (!enif_is_list(env, argv[1]))
+      return enif_make_badarg(env);
+
+    ERL_NIF_TERM head, tail = argv[1];
+    while (enif_get_list_cell(env, tail, &head, &tail)) {
+      char buf[16];
+      if (enif_get_atom(env, head, buf, sizeof(buf), ERL_NIF_LATIN1)) {
+        if (strcmp("use_maps", buf) == 0)
+          use_maps = 1;
+      }
+    }
+  }
 
   if (!enif_inspect_binary(env, argv[0], &bin))
     return enif_make_badarg(env);
@@ -874,6 +889,7 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
     return enif_make_badarg(env);
 
   state->send_env = env;
+  state->use_maps = use_maps;
 
   xmlel_stack_t *xmlel = enif_alloc(sizeof(xmlel_stack_t));
   if (!xmlel) {
@@ -1060,6 +1076,7 @@ static ErlNifFunc nif_funcs[] =
     {"new", 3, new_nif},
     {"parse", 2, parse_nif},
     {"parse_element", 1, parse_element_nif},
+    {"parse_element", 2, parse_element_nif},
     {"reset", 1, reset_nif},
     {"close", 1, close_nif},
     {"change_callback_pid", 2, change_callback_pid_nif}
