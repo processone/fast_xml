@@ -4154,7 +4154,7 @@ t_from_form(Spec) ->
     erl_types:t_from_form(Spec, sets:new(), {spec, foo}, dict:new()).
 -else.
 t_from_form(Spec) ->
-    erl_types:t_from_form(Spec, sets:new(), {spec, foo, "mod.erl"}, dict:new()).
+    erl_types:t_from_form(Spec, replace_by_none, {spec, foo, "mod.erl"}, dict:new()).
 -endif.
 -endif.
 
@@ -4177,7 +4177,7 @@ t_from_form(Spec) ->
 -else.
 t_from_form(Spec) ->
     {T, _} = erl_types:t_from_form(
-	       Spec, sets:new(), {type, {mod, foo, 1}, "mod.erl"}, ets:new(tmp, []),
+	       Spec, replace_by_none, {type, {mod, foo, 1}, "mod.erl"}, ets:new(tmp, []),
 	       erl_types:var_table__new(), erl_types:cache__new()),
     T.
 -endif.
