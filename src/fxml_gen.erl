@@ -46,6 +46,9 @@
 -define(info(F, Args), io:format("fxml_gen: " ++ F ++ "~n", Args)).
 -define(warn(F, Args), io:format("* fxml_gen warning: " ++ F ++ "~n", Args)).
 
+-dialyzer(no_unused).
+-dialyzer(no_opaque). % For Erlang/OTP == 26
+
 %%====================================================================
 %% Compiler API
 %%====================================================================
@@ -419,6 +422,8 @@ write_modules(ASTs, ModName, FunDeps, ErlDirName,
 			   FileName, TaggedElems, PredefRecords, Opts)
       end, ok, ASTs).
 
+-dialyzer({no_return, write_module/9}).
+
 write_module(ModName, ModName, AST, FunDeps, ErlDirName,
 	     SpecFile, TaggedElems, PredefRecords, Opts) ->
     ModNameErl = atom_to_list(ModName) ++ ".erl",
@@ -463,6 +468,8 @@ write_module(ParentMod, ModName, AST, FunDeps, ErlDirName,
     file:write_file(
       filename:join([ErlDirName, ModNameErl]),
       [erl_prettypr:format(ResultAST), io_lib:nl()]).
+
+-dialyzer({no_return, write_resolver/4}).
 
 write_resolver(_TaggedElems, ParentMod, ErlDirName, SpecFile) ->
     ModName = resolver_mod(ParentMod),
@@ -654,6 +661,8 @@ atom_to_string(Atom) ->
 -define(is_raw_type(T),
 	element(1, T) == type orelse
 	element(1, T) == remote_type).
+
+-dialyzer({no_match, record_to_string/5}).
 
 record_to_string(#elem{result = Result} = Elem, RecDict, RecTypes, FunTypes, Opts) ->
     [RecName|RecLabels] = tuple_to_list(Result),
@@ -984,6 +993,8 @@ make_registrar(ModName) ->
      make_function(unregister_module, [?AST(Mod)],
 		   [?AST(unregister_module(Mod, '?a(ResolverMod)'))])].
 
+-dialyzer({no_return, make_resolver/2}).
+
 make_resolver(TaggedSpecs, ModName) ->
     ResolverMod = resolver_mod(ModName),
     TagNSMods = lists:foldl(
@@ -1060,6 +1071,8 @@ make_top_decoders(TaggedSpecs, ModName, Opts) ->
                 []
         end.
 
+-dialyzer({no_return, make_top_decoders_json/2}).
+
 make_top_decoders_json(TaggedSpecs, _ModName) ->
     RecordMods = lists:foldl(
 		   fun({_, #elem{result = Result, module = Mod}}, Acc) ->
@@ -1080,6 +1093,8 @@ make_top_decoders_json(TaggedSpecs, _ModName) ->
                            [?AST('?a(Mod)':do_decode_json(El))]) | Acc]
                 end, [], RecordMods),
     [erl_syntax:function(?AST(decode_json), Clauses)].
+
+-dialyzer({no_return, make_decoders/5}).
 
 make_decoders(TaggedSpecs1, PredefRecords, ParentMod, ModName, Opts) ->
     TaggedSpecs = lists:flatmap(
@@ -1239,6 +1254,8 @@ make_decoders_json(TaggedSpecs1, PredefRecords, ParentMod, ModName) ->
           end, TaggedSpecs),
     [erl_syntax:function(erl_syntax:atom(do_decode_json),
                          Clauses ++ NilClause)].
+
+-dialyzer({no_return, make_top_encoders/3}).
 
 make_top_encoders(_TaggedSpecs, _ModName, Opts) ->
     Clause1 = erl_syntax:clause(
@@ -1420,6 +1437,8 @@ make_encoders(TaggedSpecs, ModName, Opts) ->
        true -> []
     end.
 
+-dialyzer({no_return, make_printer/4}).
+
 make_printer(TaggedSpecs, PredefRecords, ModName, ParentMod) ->
     PassClause1 =
 	if ModName == ParentMod ->
@@ -1545,6 +1564,8 @@ make_getters_setters(TaggedSpecs, PredefRecords, ModName) ->
 	    [erl_syntax:function(?AST(get_els), Getters),
 	     erl_syntax:function(?AST(set_els), Setters)]
     end.
+
+-dialyzer({no_return, elem_to_AST/8}).
 
 elem_to_AST(#elem{name = Name, xmlns = XMLNS, cdata = CData,
                   result = Result, attrs = Attrs, refs = _Refs} = Elem,
@@ -1687,6 +1708,8 @@ get_spec_by_label(Label, Elem) ->
             Spec
     end.
 
+-spec group_refs([erl_types:erl_type()]) -> [{atom(), [erl_types:erl_type()]}].
+
 group_refs(Refs) ->
     dict:to_list(
       lists:foldl(
@@ -1771,6 +1794,8 @@ make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
                             Refs, Tag, XMLNS, AllElems,
                             Result, Types, ModName, IgnoreEls, Opts)
         ++ make_attrs_dec_fun(FunName ++ "_attrs", Attrs, Tag).
+
+-dialyzer({no_return, make_els_dec_clause/10}).
 
 make_els_dec_clause(ParentMod, ModName, FunName, CDataVars, Refs, _TopXMLNS,
 		    AllElems, Result, {_SortedTags, Types, _RecDict}, _Opts) ->
@@ -2108,6 +2133,9 @@ make_attrs_dec_fun(FunName, Attrs, Tag) ->
        true ->
             []
     end.
+
+-dialyzer({no_fail_call, make_ref_enc_funs/3}).
+-dialyzer({no_return, make_ref_enc_funs/3}).
 
 make_ref_enc_funs(Elem, Tag, AllElems) ->
     ModName = Elem#elem.module,
@@ -3027,6 +3055,8 @@ get_json_type(FType, Default, IsRequired) ->
             get_json_type2(FType)
     end.
 
+-dialyzer({no_opaque, get_json_type2/1}).
+
 get_json_type2(FType) ->
     case erl_types:t_is_tuple(FType) of
         true ->
@@ -3199,6 +3229,8 @@ json_case_to_atd(Types) ->
      string:join(Variants, " | "),
      "]"].
 
+
+-dialyzer({no_return, make_decoding_MFA/9}).
 
 make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                   IsRequired, Default, DecMFA, _Types, ModName) ->
@@ -3615,6 +3647,8 @@ extract_labels_from_term(Term) ->
                       Acc
               end
       end, [], abstract(Term)).
+
+-dialyzer({no_opaque, get_label_type/5}).
 
 get_label_type(Label, Elem, Dict, FunSpecs, Opts) ->
     XMLType = t_remote(fxml, xmlel),
@@ -4169,12 +4203,14 @@ t_from_form(Spec) ->
     T.
 -else.
 -ifdef(OTP_RELEASE_MINOR_25).
+-dialyzer({no_return, t_from_form/1}).
 t_from_form(Spec) ->
     {T, _} = erl_types:t_from_form(
 	       Spec, sets:new(), {type, {mod, foo, 1}, "mod.erl"}, dict:new(),
 	       erl_types:var_table__new(), erl_types:cache__new()),
     T.
 -else.
+-dialyzer({[no_opaque, no_return], t_from_form/1}).
 t_from_form(Spec) ->
     {T, _} = erl_types:t_from_form(
 	       Spec, replace_by_none, {type, {mod, foo, 1}, "mod.erl"}, ets:new(tmp, []),
