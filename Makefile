@@ -16,6 +16,9 @@ clean:
 ifeq "$(IS_REBAR3)" "1"
 test:
 	$(REBAR) eunit -v
+
+spec:
+	$(ERL) -noinput +B -pa _build/default/lib/fast_xml/ebin -eval 'case fxml_gen:compile("spec/fxmlrpc_codec.spec", [{erl_dir, "src"}, {hrl_dir, "include"}]) of ok -> halt(0); _ -> halt(1) end.'
 else
 test: all
 	$(REBAR) -v skip_deps=true eunit
