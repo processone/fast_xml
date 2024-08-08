@@ -15,7 +15,6 @@ jobs:
       image: erlang:${{ matrix.otp }}
     steps:
     - uses: actions/checkout@v4
-    - run: sed -i 's|p1_utils|p1_utils, syntax_tools, compiler, dialyzer|g' src/fast_xml.app.src
     - run: ./configure
     - run: make
     - run: rebar3 compile
