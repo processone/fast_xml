@@ -170,9 +170,3 @@ production in thousands of real life deployments.
 You can run eunit test with the command:
 
     $ rebar eunit
-
-#### Elixir / Quickcheck test
-
-You can run test written with Elixir / Quickcheck thanks to the mix command:
-
-    MIX_EXS=test/elixir/mix.exs mix test
