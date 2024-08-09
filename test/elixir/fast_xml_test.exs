@@ -15,19 +15,22 @@
 defmodule FastXMLTest do
   use ExUnit.Case
 
-  # TODO: we should be able to pass :use_maps option to :fxml_stream.parse_element/2
+  test "Parse element can return Elixir structs" do
+    assert %FastXML.El{name: "root"} == :fxml_stream.parse_element("<root></root>", [:use_maps])
+  end
   
   test "Stream parser can return Elixir structs" do
-    s1 = :fxml_stream.new(self, :infinity, [:no_gen_server, :use_maps])
-    s2 = :fxml_stream.parse(s1, "<root>")
-    assert receive_stanza == %FastXML.StreamStart{name: "root"}
-    s3 = :fxml_stream.parse(s2, "<xmlelement>content cdata</xmlelement>")
-    assert receive_stanza == %FastXML.El{name: "xmlelement", children: ["content cdata"]}
-    s4 = :fxml_stream.parse(s3, "<xmlelement><empty/><subelement attribute='true'>content cdata</subelement></xmlelement>")
-    assert receive_stanza == %FastXML.El{name: "xmlelement", children: ["content cdata"]}
-    s5 = :fxml_stream.parse(s4, "</root>")
-    assert receive_stanza == %FastXML.StreamEnd{name: "root"}
-    :fxml_stream.close(s5)
+    :fxml_stream.new(self(), :infinity, [:no_gen_server, :use_maps])
+    |> :fxml_stream.parse("<root>")
+    |> :fxml_stream.parse("<xmlelement>content cdata</xmlelement>")
+    |> :fxml_stream.parse("<xmlelement><empty/><subelement attribute='true'>content cdata</subelement></xmlelement>")
+    |> :fxml_stream.parse("</root>")
+    |> :fxml_stream.close()
+
+    assert receive_stanza() == %FastXML.StreamStart{name: "root"}
+    assert receive_stanza() == %FastXML.El{name: "xmlelement", children: ["content cdata"]}
+    assert receive_stanza() == %FastXML.El{name: "xmlelement", children: [%FastXML.El{name: "empty"}, %FastXML.El{name: "subelement", attrs: %{"attribute" => "true"}, children: ["content cdata"]}]}
+    assert receive_stanza() == %FastXML.StreamEnd{name: "root"}
   end
 
   test "Size of parsed stanza can be limited" do
@@ -49,7 +52,7 @@ defmodule FastXMLTest do
 
 # TODO test mismatched tags
   
-  defp receive_stanza do
+  defp receive_stanza() do
     receive do
       result ->
         result

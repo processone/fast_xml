@@ -121,6 +121,9 @@ tag_with_tags_test() ->
 				    {xmlcdata, <<"cdata2">>}]},
 		 fxml_stream:parse_element(<<"<root><a/>cdata1<b/>cdata2</root>">>)).
 
+use_maps_test() ->
+    ?assertEqual(#{'__struct__' => 'Elixir.FastXML.El', name => <<"root">>, attrs => #{}, children => []}, fxml_stream:parse_element(<<"<root></root>">>, [use_maps])).
+
 receiver(Acc) ->
     receive
 	{'$gen_event', Msg} ->
