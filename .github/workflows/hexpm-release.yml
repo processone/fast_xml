@@ -51,7 +51,7 @@ jobs:
         if: failure()
         run: head rebar3.crashdump
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: rebar3-dump
