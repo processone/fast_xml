@@ -21,7 +21,7 @@ jobs:
     - run: rebar3 xref
     - run: rebar3 dialyzer
     - run: rebar3 eunit -v
-      if: matrix.otp >= 24
+      if: matrix.otp >= 26
 
   cover:
     name: Cover
