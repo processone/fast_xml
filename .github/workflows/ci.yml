@@ -27,6 +27,8 @@ jobs:
     name: Cover
     needs: [tests]
     runs-on: ubuntu-24.04
+    container:
+      image: erlang:26
     steps:
     - uses: actions/checkout@v4
     - run: ./configure --enable-gcov
