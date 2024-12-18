@@ -1,3 +1,7 @@
+# Version 1.1.54
+
+* Improve `make spec` when using Erlang 26+
+
 # Version 1.1.53
 
 * Add 'use_maps' option to fxml_stream.parse_element()
