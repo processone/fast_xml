@@ -9,41 +9,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp: [20, 25, 26, 27]
+        otp: ['20', '25', '26', '27', '28']
     runs-on: ubuntu-24.04
     container:
-      image: erlang:${{ matrix.otp }}
+      image: public.ecr.aws/docker/library/erlang:${{ matrix.otp }}
     steps:
     - uses: actions/checkout@v4
-    - run: ./configure
+    - run: ./configure --enable-gcov
     - run: make
     - run: rebar3 compile
     - run: rebar3 xref
     - run: rebar3 dialyzer
     - run: rebar3 eunit -v
       if: matrix.otp >= 26
-
-  cover:
-    name: Cover
-    needs: [tests]
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v4
-    - name: Get Erlang/OTP
-      uses: erlef/setup-beam@v1
-      with:
-        otp-version: 26
-        rebar3-version: '3.24.0'
-    - run: ./configure --enable-gcov
-    - run: rebar3 compile
     - run: rebar3 eunit -v
-    - run: rebar3 eunit -v
-    - run: pip install --user cpp-coveralls
-    - run: cpp-coveralls -b `pwd` --verbose --gcov-options '\-lp' --dump c.json
+      if: matrix.otp >= 26
     - name: Send to Coveralls
+      if: matrix.otp == 27
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        apt-get -qq update
+        apt-get -qq install pipx
+        pipx install cpp-coveralls
+        /github/home/.local/bin/cpp-coveralls -b `pwd` --verbose --gcov-options '\-lp' --dump c.json
         ADDJSONFILE=c.json COVERALLS=true rebar3 as test coveralls send
         curl -v -k https://coveralls.io/webhook \
              --header "Content-Type: application/json" \

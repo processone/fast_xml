@@ -16,8 +16,8 @@ jobs:
       - name: Get Erlang/OTP
         uses: erlef/setup-beam@v1
         with:
-          otp-version: 26
-          rebar3-version: '3.24.0'
+          otp-version: 27
+          rebar3-version: '3.25.0'
 
       - name: Generate documentation
         run: rebar3 edoc
