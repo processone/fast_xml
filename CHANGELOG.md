@@ -1,3 +1,7 @@
+# Version 1.1.56
+
+* Updating p1_utils to version 1.0.27.
+
 # Version 1.1.54
 
 * Improve `make spec` when using Erlang 26+
