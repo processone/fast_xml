@@ -4219,11 +4219,17 @@ t_from_form(Spec) ->
 -endif.
 -endif.
 
+-ifdef(OTP_RELEASE_MINOR_28).
 t_remote(Mod, Type) ->
     D = dict_from_list([{{opaque, Type, []},
 			 {{Mod, 1, 2, []}, type}}]),
     [T] = erl_types:t_opaque_from_records(D),
     T.
+-else.
+t_remote(Mod, Type) ->
+    erl_types:t_nominal({Mod, Type, 0, opaque}, opaque).
+-endif.
+
 -endif.
 
 -ifdef(USE_DICT).
