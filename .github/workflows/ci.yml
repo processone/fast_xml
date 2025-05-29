@@ -19,9 +19,7 @@ jobs:
     - run: make
     - run: rebar3 compile
     - run: rebar3 xref
-      if: matrix.otp < 28
     - run: rebar3 dialyzer
-      if: matrix.otp < 28
     - run: rebar3 eunit -v
       if: matrix.otp >= 26
     - run: rebar3 eunit -v
