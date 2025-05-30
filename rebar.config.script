@@ -30,10 +30,12 @@ Cfg = case file:consult(filename:join([filename:dirname(SCRIPT),"vars.config"]))
 {ldflags, CfgLDFlags} = lists:keyfind(ldflags, 1, Cfg),
 {with_gcov, CfgWithGCov} = lists:keyfind(with_gcov, 1, Cfg),
 
-IsRebar3 = case erlang:function_exported(rebar3, main, 1) of
-	       true ->
-		   true;
-	       _ ->
+IsRebar3 = case application:get_key(rebar, vsn) of
+	       {ok, VSN} ->
+		   [VSN1 | _] = string:tokens(VSN, "-"),
+		   [Maj|_] = string:tokens(VSN1, "."),
+		   (list_to_integer(Maj) >= 3);
+	       undefined ->
 		   lists:keymember(mix, 1, application:loaded_applications())
 	   end,
 
@@ -77,13 +79,31 @@ AppendList = fun(Append) ->
 		     end
 	     end,
 
-Rebar3DepsFilter = fun(DepsList) ->
-			   lists:map(fun({DepName,_, {git,_, {tag,Version}}}) ->
-					     {DepName, Version};
-					(Dep) ->
-					     Dep
-				     end, DepsList)
-		   end,
+% Convert our rich deps syntax to rebar2 format:
+% https://github.com/rebar/rebar/wiki/Dependency-management
+Rebar2DepsFilter =
+fun(DepsList) ->
+	lists:map(fun({DepName, _HexVersion, Source}) ->
+	              {DepName, ".*", Source}
+		  end, DepsList)
+end,
+
+% Convert our rich deps syntax to rebar3 version definition format:
+% https://rebar3.org/docs/configuration/dependencies/#dependency-version-handling
+% https://hexdocs.pm/elixir/Version.html
+Rebar3DepsFilter =
+fun(DepsList) ->
+	lists:map(fun({DepName, HexVersion, {git, _, {tag, GitVersion}} = Source}) ->
+			  case HexVersion == ".*" of
+                              true ->
+                                  {DepName, GitVersion};
+                              false ->
+                                  {DepName, HexVersion}
+                          end;
+		     ({DepName, _HexVersion, Source}) ->
+	              {DepName, ".*", Source}
+		  end, DepsList)
+end,
 
 GlobalDepsFilter = fun(Deps) ->
 			   DepNames = lists:map(fun({DepName, _, _}) -> DepName;
