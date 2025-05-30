@@ -151,6 +151,8 @@ Rules = [
 	  AppendStr("--coverage"), ""},
 	 {[port_env, "CFLAGS"], CfgWithGCov == "true",
 	  AppendStr("--coverage"), ""},
+	 {[deps], (not IsRebar3),
+	  Rebar2DepsFilter, []},
 	 {[deps], IsRebar3,
 	  Rebar3DepsFilter, []},
 	 {[plugins], IsRebar3,
