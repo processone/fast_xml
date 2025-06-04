@@ -1074,3 +1074,9 @@ rpc_empty_response_test() ->
     Result = {response, []},
     ?assertEqual({ok, Result}, fxmlrpc:decode(Response)),
     ?assertEqual(Response, fxmlrpc:encode(Result)).
+
+compile_spec_test() ->
+    Res = fxml_gen:compile("spec/fxmlrpc_codec.spec",
+                          [{erl_dir, "src"},
+                           {hrl_dir, "include"}]),
+    ?assertEqual(ok, Res).
