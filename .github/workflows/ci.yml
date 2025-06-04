@@ -24,6 +24,7 @@ jobs:
       if: matrix.otp >= 26
     - run: rebar3 eunit -v
       if: matrix.otp >= 26
+    - run: REBAR=rebar3 make spec
     - name: Send to Coveralls
       if: matrix.otp == 27
       env:
