@@ -1,5 +1,6 @@
 # Version 1.1.57
 
+* Updating p1_utils to version 1.0.28.
 * Fix compatibility with Erlang 28
 
 # Version 1.1.56
