@@ -3277,15 +3277,16 @@ make_decoding_MFA(Parents, TagName, _TagNS, AttrName,
                     Body;
                 _ ->
 		    BadVal = erl_syntax:atom("bad_" ++ Type ++ "_value"),
-                    erl_syntax:case_expr(
-                      erl_syntax:catch_expr(Body),
+                    erl_syntax:try_expr(
+                      [Body],
+                      [erl_syntax:clause([?AST(_res)], none, [?AST(_res)])],
                       [erl_syntax:clause(
-                         [?AST({'EXIT', _})],
+                         [?AST(error:_)],
                          none,
                          [?AST(erlang:error(
 				 {'?a(ModName)', {'?BadVal', '?a(AttrName)',
-						  '?a(TagName)', __TopXMLNS}}))]),
-                       erl_syntax:clause([?AST(_res)], none, [?AST(_res)])])
+						  '?a(TagName)', __TopXMLNS}}))])]
+                     )
             end,
     Clause2 = erl_syntax:clause(
 		[?AST(__TopXMLNS),
