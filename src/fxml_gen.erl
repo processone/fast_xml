@@ -56,10 +56,11 @@ compile(Path) ->
     compile(Path, []).
 
 compile(Path, Opts) ->
-    case catch do_compile(Path, Opts) of
+    try do_compile(Path, Opts) of
         ok ->
-            ok;
-        Err ->
+            ok
+    catch
+        _:Err ->
             io:format("failed to compile ~p: ~p~n", [Path, Err]),
             Err
     end.
@@ -518,7 +519,7 @@ make_aux_funs() ->
         {ok, AbsCode} ->
 	    lists:filter(
 	      fun(T) ->
-                      case catch erl_syntax_lib:analyze_function(T) of
+                      try erl_syntax_lib:analyze_function(T) of
                           {format_error, 1} -> true;
 			  {io_format_error, 1} -> true;
 			  {get_attr, 3} -> true;
@@ -527,7 +528,9 @@ make_aux_funs() ->
 			  {register_module, 2} -> true;
 			  {unregister_module, 2} -> true;
 			  {recompile_resolver, 2} -> true;
-                          _ -> false
+			  _ -> false
+                      catch
+                          _:_ -> false
                       end
               end, AbsCode);
         error ->
@@ -539,13 +542,15 @@ make_builtin_codec_funs() ->
         {ok, AbsCode} ->
 	    lists:filter(
 	      fun(T) ->
-                      case catch erl_syntax_lib:analyze_function(T) of
+                      try erl_syntax_lib:analyze_function(T) of
                           {dec_int, 3} -> true;
                           {dec_int, 1} -> true;
                           {dec_enum, 2} -> true;
                           {enc_int, 1} -> true;
                           {enc_enum, 1} -> true;
                           _ -> false
+                      catch
+                          _:_ -> false
                       end
               end, AbsCode);
         error ->
@@ -3096,12 +3101,13 @@ get_json_type2(FType) ->
                                     {list, get_json_type2(erl_types:t_list_elements(FType))};
                                 false ->
                                     Undefined = erl_types:t_atom(undefined),
-                                    case catch erl_types:t_elements(FType) of
+                                    try erl_types:t_elements(FType) of
                                         [Undefined, T] ->
                                             {option, get_json_type2(T), undefined};
                                         [_, _ | _] ->
-                                            {todo, FType};
-                                        _ ->
+                                            {todo, FType}
+                                    catch
+                                        _:_ ->
                                             case erl_types:t_is_any(FType) of
                                                 true ->
                                                     {todo, FType};
@@ -4040,11 +4046,12 @@ consult(Path) ->
             Str = lists:map(
                     fun(Tree) ->
                             AbsForm = erl_syntax:revert_forms(Tree),
-                            case catch erl_eval:exprs(AbsForm, []) of
-                                {'EXIT', _} ->
-                                    [];
+                            try erl_eval:exprs(AbsForm, []) of
                                 {value, Term, _} ->
                                     [io_lib:print(Term), $., io_lib:nl()]
+                            catch
+                                error:_ ->
+                                    []
                             end
                     end, Terms),
             Res = case file:write_file(TmpFile, Str) of
@@ -4058,7 +4065,9 @@ consult(Path) ->
                       Err ->
                           Err
                   end,
-            catch file:delete(TmpFile),
+            try file:delete(TmpFile)
+            catch _:_ -> error
+            end,
             Res;
         Err ->
             Err

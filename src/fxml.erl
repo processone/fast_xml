@@ -52,9 +52,10 @@ load_nif() ->
     load_nif(SOPath).
 
 load_nif(SOPath) ->
-    case catch erlang:load_nif(SOPath, 0) of
-        ok -> ok;
-        Err -> error_logger:warning_msg("unable to load fxml NIF: ~p~n", [Err]),
+    try erlang:load_nif(SOPath, 0) of
+        ok -> ok
+    catch
+        _:Err -> error_logger:warning_msg("unable to load fxml NIF: ~p~n", [Err]),
                {error, unable_to_load_nif}
     end.
 
