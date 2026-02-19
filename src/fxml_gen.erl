@@ -3707,7 +3707,12 @@ build_ref_deps(TaggedElems) ->
     G.
 
 get_abstract_code_from_myself() ->
-    {file, File} = code:is_loaded(?MODULE),
+    File = case code:is_loaded(?MODULE) of
+        {file, cover_compiled} ->
+             filename:join(code:lib_dir(fast_xml), "ebin/fxml_gen.beam");
+        {file, FF} ->
+             FF
+    end,
     case beam_lib:chunks(File, [abstract_code]) of
         {ok, {_, List}} ->
             case lists:keyfind(abstract_code, 1, List) of
