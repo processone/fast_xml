@@ -9,12 +9,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        otp: ['20', '25', '26', '27', '28']
+        otp: [20, 25, 26, 27, 28, 29]
     runs-on: ubuntu-24.04
     container:
       image: public.ecr.aws/docker/library/erlang:${{ matrix.otp }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: ./configure --enable-gcov
     - run: make
     - run: rebar3 compile
@@ -26,7 +26,7 @@ jobs:
       if: matrix.otp >= 26
     - run: REBAR=rebar3 make spec
     - name: Send to Coveralls
-      if: matrix.otp == 27
+      if: matrix.otp == 28
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
