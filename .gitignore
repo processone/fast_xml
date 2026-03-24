@@ -11,7 +11,10 @@ c_src/*.o
 config.log
 config.status
 deps
+doc
 ebin
+include/fxmlrpc_codec.hrl
 priv
 rebar.lock
+test/*.beam
 vars.config
