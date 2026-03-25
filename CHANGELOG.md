@@ -1,3 +1,9 @@
+# Version 1.1.58
+
+* Fix new deprecation in R29
+* Improve tests
+ 
+
 # Version 1.1.57
 
 * Updating p1_utils to version 1.0.28.
