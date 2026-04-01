@@ -21,6 +21,7 @@
 #include <expat.h>
 
 #define PARSING_NOT_RESUMABLE XML_FALSE
+#define LIMIT_MAX ((ErlNifUInt64)-1)
 
 #define ASSERT(x) if (!(x)) return 0
 #define PARSER_ASSERT(X, E) do { if (!(X)) { state->error = (E); XML_StopParser(state->parser, PARSING_NOT_RESUMABLE); return; } } while(0)
@@ -56,8 +57,10 @@ typedef struct {
   ErlNifEnv *send_env;
   ErlNifPid *pid;
   size_t depth;
-  size_t size;
-  size_t max_size;
+  ErlNifUInt64 size;
+  ErlNifUInt64 elements_count;
+  ErlNifUInt64 max_size;
+  ErlNifUInt64 max_elements;
   XML_Parser parser;
   xmlel_stack_t *elements_stack;
   attrs_list_t *xmlns_attrs;
@@ -256,6 +259,7 @@ static ERL_NIF_TERM str2bin(ErlNifEnv *env, const char *s)
 static void send_event(state_t *state, ERL_NIF_TERM el)
 {
   state->size = 0;
+  state->elements_count = 0;
   if (state->gen_server) {
     enif_send(state->env, state->pid, state->send_env,
               enif_make_tuple2(state->send_env,
@@ -270,6 +274,7 @@ static void send_event(state_t *state, ERL_NIF_TERM el)
 static void send_all_state_event(state_t *state, ERL_NIF_TERM el)
 {
   state->size = 0;
+  state->elements_count = 0;
   if (state->gen_server) {
     enif_send(state->env, state->pid, state->send_env,
               enif_make_tuple2(state->send_env,
@@ -310,6 +315,9 @@ void erlXML_StartElementHandler(state_t *state,
 
   if (state->error)
     return;
+
+  state->elements_count += 1;
+  PARSER_ASSERT(state->elements_count < state->max_elements, "XML stanza is too big");
 
   state->depth++;
 
@@ -851,6 +859,7 @@ static ERL_NIF_TERM reset_nif(ErlNifEnv* env, int argc,
   enif_clear_env(state->send_env);
 
   state->size = 0;
+  state->elements_count = 0;
   state->depth = 0;
   state->error = NULL;
 
@@ -887,6 +896,9 @@ static ERL_NIF_TERM parse_element_nif(ErlNifEnv* env, int argc,
   state_t *state = init_parser_state(NULL);
   if (!state)
     return enif_make_badarg(env);
+
+  state->max_elements = LIMIT_MAX;
+  state->max_size = LIMIT_MAX;
 
   state->send_env = env;
   state->use_maps = use_maps;
@@ -962,11 +974,14 @@ static ERL_NIF_TERM parse_nif(ErlNifEnv* env, int argc,
   state->size += bin.size;
   state->env = env;
 
+  if (state->error) {
+    send_error(state, str2bin(state->send_env, state->error));
+    return argv[0];
+  }
+
   if (state->size >= state->max_size) {
-    size_t size = state->size;
-    send_error(state, str2bin(state->send_env, "XML stanza is too big"));
-    /* Don't let send_event() to set size to zero */
-    state->size = size;
+    state->error = "XML stanza is too big";
+    send_error(state, str2bin(state->send_env, state->error));
   } else {
     int res = XML_Parse(state->parser, (char *)bin.data, bin.size, 0);
     if (!res)
@@ -1059,16 +1074,67 @@ static ERL_NIF_TERM new_nif(ErlNifEnv* env, int argc,
   ERL_NIF_TERM result = enif_make_resource(env, state);
   enif_release_resource(state);
 
-  ErlNifUInt64 max_size;
-  if (enif_get_uint64(env, argv[1], &max_size))
+  ErlNifUInt64 max_size, max_elements;
+  int arity;
+  ERL_NIF_TERM *tuple_elements;
+  if (enif_get_uint64(env, argv[1], &max_size)) {
     state->max_size = (size_t) max_size;
-  else if (!enif_compare(argv[1], enif_make_atom(env, "infinity")))
-    state->max_size = (size_t) - 1;
-  else
+    state->max_elements = LIMIT_MAX;
+  } else if (!enif_compare(argv[1], enif_make_atom(env, "infinity"))) {
+    state->max_size = LIMIT_MAX;
+    state->max_elements = LIMIT_MAX;
+  } else if (enif_get_tuple(env, argv[1], &arity, &tuple_elements) && arity == 2) {
+    if (enif_get_uint64(env, tuple_elements[0], &max_size)) {
+      state->max_size = max_size;
+    } else if (!enif_compare(tuple_elements[0], enif_make_atom(env, "infinity"))) {
+      state->max_size = LIMIT_MAX;
+    } else {
+      return enif_make_badarg(env);
+    }
+
+    if (enif_get_uint64(env, tuple_elements[1], &max_elements)) {
+      state->max_elements = max_elements;
+    } else if (!enif_compare(tuple_elements[1], enif_make_atom(env, "infinity"))) {
+      state->max_elements = LIMIT_MAX;
+    } else {
+      return enif_make_badarg(env);
+    }
+  } else
     return enif_make_badarg(env);
 
   return result;
 }
+
+static ERL_NIF_TERM change_limits_nif(ErlNifEnv* env, int argc,
+                                      const ERL_NIF_TERM argv[])
+{
+  state_t *state = NULL;
+
+  if (argc != 3)
+    return enif_make_badarg(env);
+
+  if (!enif_get_resource(env, argv[0], parser_state_t, (void *) &state))
+    return enif_make_badarg(env);
+
+  ErlNifUInt64 max_size, max_elements;
+  if (enif_get_uint64(env, argv[1], &max_size)) {
+  } else if (!enif_compare(argv[1], enif_make_atom(env, "infinity"))) {
+    max_size = LIMIT_MAX;
+  } else
+    return enif_make_badarg(env);
+
+  if (enif_get_uint64(env, argv[2], &max_elements)) {
+  } else if (!enif_compare(argv[2], enif_make_atom(env, "infinity"))) {
+    max_elements = LIMIT_MAX;
+  } else
+    return enif_make_badarg(env);
+
+  state->max_size = max_size;
+  state->max_elements = max_elements;
+
+  return enif_make_atom(env, "ok");
+}
+
 
 static ErlNifFunc nif_funcs[] =
   {
@@ -1079,7 +1145,8 @@ static ErlNifFunc nif_funcs[] =
     {"parse_element", 2, parse_element_nif},
     {"reset", 1, reset_nif},
     {"close", 1, close_nif},
-    {"change_callback_pid", 2, change_callback_pid_nif}
+    {"change_callback_pid", 2, change_callback_pid_nif},
+    {"change_limits", 3, change_limits_nif}
   };
 
 ERL_NIF_INIT(fxml_stream, nif_funcs, load, NULL, upgrade, NULL)

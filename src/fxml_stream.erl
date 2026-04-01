@@ -30,7 +30,7 @@
 -on_load(init/0).
 
 -export([new/1, new/2, new/3, parse/2, close/1, reset/1,
-	 change_callback_pid/2, parse_element/1, parse_element/2]).
+	 change_callback_pid/2, change_limits/3, parse_element/1, parse_element/2]).
 
 -export([load_nif/0, load_nif/1]).
 
@@ -77,12 +77,12 @@ load_nif(SOPath) ->
 new(CallbackPid) ->
     new(CallbackPid, infinity).
 
--spec new(pid(), non_neg_integer() | infinity) -> xml_stream_state().
+-spec new(pid(), non_neg_integer() | infinity | {non_neg_integer() | infinity, non_neg_integer() | infinity}) -> xml_stream_state().
 
 new(_CallbackPid, _MaxSize) ->
     erlang:nif_error(nif_not_loaded).
 
--spec new(pid(), non_neg_integer() | infinity, list()) -> xml_stream_state().
+-spec new(pid(), non_neg_integer() | infinity | {non_neg_integer() | infinity, non_neg_integer() | infinity}, list()) -> xml_stream_state().
 
 new(_CallbackPid, _MaxSize, _Options) ->
     erlang:nif_error(nif_not_loaded).
@@ -95,6 +95,10 @@ reset(_State) ->
 -spec change_callback_pid(xml_stream_state(), pid()) -> xml_stream_state().
 
 change_callback_pid(_State, _CallbackPid) ->
+    erlang:nif_error(nif_not_loaded).
+
+-spec change_limits(xml_stream_state(), non_neg_integer() | infinity, non_neg_integer() | infinity) -> ok.
+change_limits(_State, _NewMaxSize, _NewMaxElements) ->
     erlang:nif_error(nif_not_loaded).
 
 -spec parse(xml_stream_state(), binary()) -> xml_stream_state().
