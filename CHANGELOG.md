@@ -1,3 +1,7 @@
+# Version 1.1.60
+
+* Fix compilation warning on recent gcc
+
 # Version 1.1.59
 
 * Add ability to limit number of elements in accepted stanzas
