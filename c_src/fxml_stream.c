@@ -1076,7 +1076,7 @@ static ERL_NIF_TERM new_nif(ErlNifEnv* env, int argc,
 
   ErlNifUInt64 max_size, max_elements;
   int arity;
-  ERL_NIF_TERM *tuple_elements;
+  const ERL_NIF_TERM *tuple_elements;
   if (enif_get_uint64(env, argv[1], &max_size)) {
     state->max_size = (size_t) max_size;
     state->max_elements = LIMIT_MAX;
