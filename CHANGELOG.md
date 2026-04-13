@@ -1,3 +1,8 @@
+# Version 1.1.59
+
+* Add ability to limit number of elements in accepted stanzas
+* Add ability to change stanza limits after stream initialization
+
 # Version 1.1.58
 
 * Updating p1_utils to version 1.0.29.
