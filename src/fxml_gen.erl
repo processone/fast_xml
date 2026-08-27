@@ -1716,12 +1716,20 @@ get_spec_by_label(Label, Elem) ->
 -spec group_refs([erl_types:erl_type()]) -> [{atom(), [erl_types:erl_type()]}].
 
 group_refs(Refs) ->
-    dict:to_list(
-      lists:foldl(
-        fun(#ref{name = Name, label = Label} = Ref, G) ->
-                L = prepare_label(Label, Name),
-                dict:append_list(L, [Ref], G)
-        end, dict:new(), Refs)).
+    {LabelsRev, Groups} =
+	lists:foldl(
+	  fun(#ref{name = Name, label = Label} = Ref,
+	      {AccLabels, AccGroups}) ->
+		  GroupLabel = prepare_label(Label, Name),
+		  NewLabels = case dict:is_key(GroupLabel, AccGroups) of
+			  true -> AccLabels;
+			  false -> [GroupLabel | AccLabels]
+			      end,
+		  {NewLabels,
+		   dict:append_list(GroupLabel, [Ref], AccGroups)}
+	  end, {[], dict:new()}, Refs),
+    [{Label, dict:fetch(Label, Groups)}
+     || Label <- lists:reverse(LabelsRev)].
 
 make_elem_dec_fun(#elem{name = Name, result = Result, refs = Refs, module = Mod,
                         cdata = CData, attrs = Attrs, xmlns = XMLNS,
@@ -2432,7 +2440,7 @@ make_elem_enc_fun(#elem{result = Result, attrs = Attrs,
                          false ->
                              ?AST([])
                      end,
-    RefsFun = lists:foldr(
+    RefsFun = lists:foldl(
 		fun({Label, _}, Acc) ->
 			Var = label_to_var(Label),
 			make_function_call(
