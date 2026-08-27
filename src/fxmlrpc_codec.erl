@@ -460,30 +460,30 @@ encode_name_cdata(_val, _acc) ->
 
 decode_member(__TopXMLNS, __Opts,
               {xmlel, <<"member">>, _attrs, _els}) ->
-    {Value, Name} = decode_member_els(__TopXMLNS,
+    {Name, Value} = decode_member_els(__TopXMLNS,
                                       __Opts,
                                       _els,
                                       error,
                                       error),
     {Name, Value}.
 
-decode_member_els(__TopXMLNS, __Opts, [], Value,
-                  Name) ->
-    {case Value of
-         error ->
-             erlang:error({fxmlrpc_codec,
-                           {missing_tag, <<"value">>, __TopXMLNS}});
-         {value, Value1} -> Value1
-     end,
-     case Name of
+decode_member_els(__TopXMLNS, __Opts, [], Name,
+                  Value) ->
+    {case Name of
          error ->
              erlang:error({fxmlrpc_codec,
                            {missing_tag, <<"name">>, __TopXMLNS}});
          {value, Name1} -> Name1
+     end,
+     case Value of
+         error ->
+             erlang:error({fxmlrpc_codec,
+                           {missing_tag, <<"value">>, __TopXMLNS}});
+         {value, Value1} -> Value1
      end};
 decode_member_els(__TopXMLNS, __Opts,
-                  [{xmlel, <<"name">>, _attrs, _} = _el | _els], Value,
-                  Name) ->
+                  [{xmlel, <<"name">>, _attrs, _} = _el | _els], Name,
+                  Value) ->
     case fxmlrpc_codec:get_attr(<<"xmlns">>,
                                 _attrs,
                                 __TopXMLNS)
@@ -492,14 +492,14 @@ decode_member_els(__TopXMLNS, __Opts,
             decode_member_els(__TopXMLNS,
                               __Opts,
                               _els,
-                              Value,
-                              {value, decode_name(<<"xmlrpc">>, __Opts, _el)});
+                              {value, decode_name(<<"xmlrpc">>, __Opts, _el)},
+                              Value);
         _ ->
-            decode_member_els(__TopXMLNS, __Opts, _els, Value, Name)
+            decode_member_els(__TopXMLNS, __Opts, _els, Name, Value)
     end;
 decode_member_els(__TopXMLNS, __Opts,
-                  [{xmlel, <<"value">>, _attrs, _} = _el | _els], Value,
-                  Name) ->
+                  [{xmlel, <<"value">>, _attrs, _} = _el | _els], Name,
+                  Value) ->
     case fxmlrpc_codec:get_attr(<<"xmlns">>,
                                 _attrs,
                                 __TopXMLNS)
@@ -508,18 +508,18 @@ decode_member_els(__TopXMLNS, __Opts,
             decode_member_els(__TopXMLNS,
                               __Opts,
                               _els,
-                              {value, decode_value(<<"xmlrpc">>, __Opts, _el)},
-                              Name);
+                              Name,
+                              {value, decode_value(<<"xmlrpc">>, __Opts, _el)});
         _ ->
-            decode_member_els(__TopXMLNS, __Opts, _els, Value, Name)
+            decode_member_els(__TopXMLNS, __Opts, _els, Name, Value)
     end;
-decode_member_els(__TopXMLNS, __Opts, [_ | _els], Value,
-                  Name) ->
+decode_member_els(__TopXMLNS, __Opts, [_ | _els], Name,
+                  Value) ->
     decode_member_els(__TopXMLNS,
                       __Opts,
                       _els,
-                      Value,
-                      Name).
+                      Name,
+                      Value).
 
 encode_member({Name, Value}, __TopXMLNS) ->
     __NewTopXMLNS =
@@ -535,11 +535,11 @@ encode_member({Name, Value}, __TopXMLNS) ->
                                            __TopXMLNS),
     {xmlel, <<"member">>, _attrs, _els}.
 
-'encode_member_$value'(Value, __TopXMLNS, _acc) ->
-    [encode_value(Value, __TopXMLNS) | _acc].
-
 'encode_member_$name'(Name, __TopXMLNS, _acc) ->
     [encode_name(Name, __TopXMLNS) | _acc].
+
+'encode_member_$value'(Value, __TopXMLNS, _acc) ->
+    [encode_value(Value, __TopXMLNS) | _acc].
 
 decode_struct(__TopXMLNS, __Opts,
               {xmlel, <<"struct">>, _attrs, _els}) ->
@@ -1485,25 +1485,25 @@ encode_methodResponse({response, Payload},
 
 decode_methodCall(__TopXMLNS, __Opts,
                   {xmlel, <<"methodCall">>, _attrs, _els}) ->
-    {Params, Name} = decode_methodCall_els(__TopXMLNS,
+    {Name, Params} = decode_methodCall_els(__TopXMLNS,
                                            __Opts,
                                            _els,
-                                           [],
-                                           error),
+                                           error,
+                                           []),
     {call, Name, Params}.
 
-decode_methodCall_els(__TopXMLNS, __Opts, [], Params,
-                      Name) ->
-    {Params,
-     case Name of
+decode_methodCall_els(__TopXMLNS, __Opts, [], Name,
+                      Params) ->
+    {case Name of
          error ->
              erlang:error({fxmlrpc_codec,
                            {missing_tag, <<"methodName">>, __TopXMLNS}});
          {value, Name1} -> Name1
-     end};
+     end,
+     Params};
 decode_methodCall_els(__TopXMLNS, __Opts,
                       [{xmlel, <<"methodName">>, _attrs, _} = _el | _els],
-                      Params, Name) ->
+                      Name, Params) ->
     case fxmlrpc_codec:get_attr(<<"xmlns">>,
                                 _attrs,
                                 __TopXMLNS)
@@ -1512,21 +1512,21 @@ decode_methodCall_els(__TopXMLNS, __Opts,
             decode_methodCall_els(__TopXMLNS,
                                   __Opts,
                                   _els,
-                                  Params,
                                   {value,
                                    decode_methodName(<<"xmlrpc">>,
                                                      __Opts,
-                                                     _el)});
+                                                     _el)},
+                                  Params);
         _ ->
             decode_methodCall_els(__TopXMLNS,
                                   __Opts,
                                   _els,
-                                  Params,
-                                  Name)
+                                  Name,
+                                  Params)
     end;
 decode_methodCall_els(__TopXMLNS, __Opts,
-                      [{xmlel, <<"params">>, _attrs, _} = _el | _els], Params,
-                      Name) ->
+                      [{xmlel, <<"params">>, _attrs, _} = _el | _els], Name,
+                      Params) ->
     case fxmlrpc_codec:get_attr(<<"xmlns">>,
                                 _attrs,
                                 __TopXMLNS)
@@ -1535,22 +1535,22 @@ decode_methodCall_els(__TopXMLNS, __Opts,
             decode_methodCall_els(__TopXMLNS,
                                   __Opts,
                                   _els,
-                                  decode_params(<<"xmlrpc">>, __Opts, _el),
-                                  Name);
+                                  Name,
+                                  decode_params(<<"xmlrpc">>, __Opts, _el));
         _ ->
             decode_methodCall_els(__TopXMLNS,
                                   __Opts,
                                   _els,
-                                  Params,
-                                  Name)
+                                  Name,
+                                  Params)
     end;
 decode_methodCall_els(__TopXMLNS, __Opts, [_ | _els],
-                      Params, Name) ->
+                      Name, Params) ->
     decode_methodCall_els(__TopXMLNS,
                           __Opts,
                           _els,
-                          Params,
-                          Name).
+                          Name,
+                          Params).
 
 encode_methodCall({call, Name, Params}, __TopXMLNS) ->
     __NewTopXMLNS =
@@ -1566,10 +1566,10 @@ encode_methodCall({call, Name, Params}, __TopXMLNS) ->
                                            __TopXMLNS),
     {xmlel, <<"methodCall">>, _attrs, _els}.
 
+'encode_methodCall_$name'(Name, __TopXMLNS, _acc) ->
+    [encode_methodName(Name, __TopXMLNS) | _acc].
+
 'encode_methodCall_$params'([], __TopXMLNS, _acc) ->
     _acc;
 'encode_methodCall_$params'(Params, __TopXMLNS, _acc) ->
     [encode_params(Params, __TopXMLNS) | _acc].
-
-'encode_methodCall_$name'(Name, __TopXMLNS, _acc) ->
-    [encode_methodName(Name, __TopXMLNS) | _acc].
