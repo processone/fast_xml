@@ -35,7 +35,7 @@
            "configure", "vars.config.in",
            "rebar.config", "rebar.config.script",
            "README.md", "LICENSE.txt"]},
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["Apache-2.0"]},
   {links, [{"Github", "https://github.com/processone/fast_xml"}]}]}.
 
 %% Local Variables:
