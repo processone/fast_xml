@@ -1,3 +1,7 @@
+# Version 1.1.61
+
+* Make xml generator generate code that preserve order of children from spec
+
 # Version 1.1.60
 
 * Fix compilation warning on recent gcc
